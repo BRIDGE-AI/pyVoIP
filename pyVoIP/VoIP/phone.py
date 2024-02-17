@@ -1,7 +1,7 @@
 from pyVoIP import RTP
 from pyVoIP.credentials import CredentialsManager
 from pyVoIP.SIP.client import SIPClient
-from pyVoIP.SIP.message.message import SIPMessage, SIPRequest, SIPResponse
+from pyVoIP.SIP.message.message import SIPMethod, SIPMessage, SIPRequest, SIPResponse
 from pyVoIP.SIP.message.response_codes import ResponseCode
 from pyVoIP.networking.sock import VoIPConnection
 from pyVoIP.networking.transport import TransportMode
@@ -107,12 +107,12 @@ class VoIPPhone:
     ) -> Optional[str]:
         # debug("Callback: "+request.summary())
         if type(request) is SIPRequest:
-            # debug("This is a message")
-            if request.method == "INVITE":
+            # debug(f"This is a message. request.method:{type(request.method)}, {request.method}")
+            if request.method == SIPMethod.INVITE:
                 self._callback_MSG_Invite(conn, request)
-            elif request.method == "BYE":
+            elif request.method == SIPMethod.BYE:
                 self._callback_MSG_Bye(request)
-            elif request.method == "OPTIONS":
+            elif request.method == SIPMethod.OPTIONS:
                 return self._callback_MSG_Options(request)
         elif type(request) is SIPResponse:
             if request.status == ResponseCode.OK:
