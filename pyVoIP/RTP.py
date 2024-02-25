@@ -338,7 +338,11 @@ class RTPClient:
         self.sin = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         # Some systems just reply to the port they receive from instead of
         # listening to the SDP.
-        self.sout = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+        # https://github.com/tayler6000/pyVoIP/issues/227#issuecomment-1954715075
+        self.sout = self.sin
+        #self.sout = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
         self.sin.bind((self.in_ip, self.in_port))
         self.sin.setblocking(False)
 

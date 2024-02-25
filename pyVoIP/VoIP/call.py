@@ -91,7 +91,7 @@ class VoIPCall:
     def receiver(self):
         """Receive and handle incoming messages"""
         while self.state is not CallState.ENDED and self.phone.NSD:
-            data = self.conn.recv(8192)
+            data = self.conn.recv(8192, ignore="ACK")
             if data is None:
                 continue
             try:
@@ -289,19 +289,21 @@ class VoIPCall:
             self.request, self.session_id, m, self.sendmode
         )
         self.conn.send(data)
-        message = SIPMessage.from_bytes(self.conn.recv())
-        if type(message) is SIPResponse:
-            debug(
-                f"Received Response to OK instead of ACK: {message.status}:\n\n"
-                + f"{message.summary()}",
-                f"Received Response to OK instead of ACK: {message.status}",
-            )
-        elif type(message) is SIPRequest and message.method != SIPMethod.ACK:
-            debug(
-                f"Received Request to OK other than ACK: {message.method}:\n\n"
-                + f"{message.summary()}",
-                f"Received Request to OK other than ACK: {message.method}",
-            )
+        data = self.conn.recv(type="ACK")
+        if data: #TODO: DEFENCE
+            message = SIPMessage.from_bytes(data)
+            if type(message) is SIPResponse:
+                debug(
+                    f"Received Response to OK instead of ACK: {message.status}:\n\n"
+                    + f"{message.summary()}",
+                    f"Received Response to OK instead of ACK: {message.status}",
+                )
+            elif type(message) is SIPRequest and message.method != SIPMethod.ACK:
+                debug(
+                    f"Received Request to OK other than ACK: {message.method}:\n\n"
+                    + f"{message.summary()}",
+                    f"Received Request to OK other than ACK: {message.method}",
+                )
         self.state = CallState.ANSWERED
 
     def transfer(

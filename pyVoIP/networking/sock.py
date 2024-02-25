@@ -53,6 +53,8 @@ class VoIPConnection:
             addr = (message.destination["host"], message.destination["port"])
             self.conn.connect(addr)
 
+        self.recv_lock = threading.Lock()
+
     def send(self, data: Union[bytes, str]) -> None:
         if type(data) is str:
             data = data.encode("utf8")
@@ -77,16 +79,16 @@ class VoIPConnection:
     def peak(self) -> bytes:
         return self.recv(8192, timeout=60, peak=True)
 
-    def recv(self, nbytes: int = 8192, timeout=0, peak=False) -> bytes:
+    def recv(self, nbytes: int = 8192, timeout=0, peak=False, **kwargs) -> bytes:
         if self._peak_buffer:
             data = self._peak_buffer
             if not peak:
                 self._peak_buffer = None
             return data
         if self.conn:
-            return self._tcp_tls_recv(nbytes, timeout, peak)
+            return self._tcp_tls_recv(nbytes, timeout, peak, **kwargs)
         else:
-            return self._udp_recv(nbytes, timeout, peak)
+            return self._udp_recv(nbytes, timeout, peak, **kwargs)
 
     def _tcp_tls_recv(self, nbytes: int, timeout=0, peak=False) -> bytes:
         timeout = time.monotonic() + timeout if timeout else math.inf
@@ -108,36 +110,52 @@ class VoIPConnection:
         debug(f"RECEIVED:\n{msg.summary()}")
         return data
 
-    def _udp_recv(self, nbytes: int, timeout=0, peak=False) -> bytes:
+    def _udp_recv(self, nbytes: int, timeout=0, peak=False, **kwargs) -> bytes:
+        type_ = kwargs.pop("type", None)
+        ignore = kwargs.pop("ignore", None)
+
         timeout = time.monotonic() + timeout if timeout else math.inf
         while time.monotonic() <= timeout and not self.sock.SD:
             # print("Trying to receive")
             # print(self.sock.get_database_dump())
             conn = self.sock.buffer.cursor()
             conn.row_factory = sqlite3.Row
-            sql = (
-                'SELECT * FROM "msgs" WHERE "call_id"=? AND '
-                + '"local_tag" IS ? AND "remote_tag" IS ?'
-            )
-            bindings = (
-                self.call_id,
-                self.local_tag,
-                self.remote_tag,
-            )
-            result = conn.execute(sql, bindings)
-            row = result.fetchone()
-            if not row:
+
+            with self.recv_lock:
+                sql = (
+                    'SELECT * FROM "msgs" WHERE "call_id"=? AND '
+                    + '"local_tag" IS ? AND "remote_tag" IS ?'
+                )
+                bindings = [
+                    self.call_id,
+                    self.local_tag,
+                    self.remote_tag,
+                ]
+
+                if type_:
+                    sql += " AND " + f'"type" IS ?'
+                    bindings.append(type_)
+
+                if ignore:
+                    sql += " AND " + f'"type" IS NOT ?'
+                    bindings.append(ignore)
+
+                result = conn.execute(sql, bindings)
+                row = result.fetchone()
+
+                if not row:
+                    conn.close()
+                    continue
+                if peak:
+                    # If peaking, return before deleting from the database
+                    conn.close()
+                    return row["msg"].encode("utf8")
+
+                try:
+                    conn.execute('DELETE FROM "msgs" WHERE "id" = ?', (row["id"],))
+                except sqlite3.OperationalError:
+                    pass
                 conn.close()
-                continue
-            if peak:
-                # If peaking, return before deleting from the database
-                conn.close()
-                return row["msg"].encode("utf8")
-            try:
-                conn.execute('DELETE FROM "msgs" WHERE "id" = ?', (row["id"],))
-            except sqlite3.OperationalError:
-                pass
-            conn.close()
             return row["msg"].encode("utf8")
         if time.monotonic() >= timeout:
             raise TimeoutError()
@@ -206,6 +224,7 @@ class VoIPSocket(threading.Thread):
                 "call_id" TEXT,
                 "local_tag" TEXT,
                 "remote_tag" TEXT,
+                "type" TEXT,
                 "msg" TEXT
             );"""
         )
@@ -432,14 +451,15 @@ class VoIPSocket(threading.Thread):
                 VoIPConnection(self, conn, message)
             )
 
+        type_ = message.start_line[0].split(" ")[0]
         call_id = message.headers["Call-ID"]
         local_tag, remote_tag = self.determine_tags(message)
         raw_message = message.raw.decode("utf8")
         conn = self.buffer.cursor()
         conn.execute(
-            "INSERT INTO msgs (call_id, local_tag, remote_tag, msg) "
-            + "VALUES (?, ?, ?, ?)",
-            (call_id, local_tag, remote_tag, raw_message),
+            "INSERT INTO msgs (call_id, local_tag, remote_tag, type, msg) "
+            + "VALUES (?, ?, ?, ?, ?)",
+            (call_id, local_tag, remote_tag, type_, raw_message),
         )
         conn.close()
         if conn_id:
