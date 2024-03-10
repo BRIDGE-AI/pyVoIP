@@ -326,8 +326,8 @@ class VoIPCall:
         """
         new_dialog = True
         conn = self.sip.send(request)
-        conn.send(request)
-        response = SIPMessage.from_bytes(conn.recv())
+        data = conn.recv(conn.send(request))
+        response = SIPMessage.from_bytes(data)
         if type(response) is not SIPResponse:
             return False
 
@@ -551,6 +551,10 @@ class VoIPCall:
     def write_audio(self, data: bytes) -> None:
         for x in self.RTPClients:
             x.write(data)
+
+    def reset_audio(self, data: bytes) -> None:
+        for x in self.RTPClients:
+            x.reset(data)
 
     def read_audio(self, length=160, blocking=True) -> bytes:
         if len(self.RTPClients) == 1:

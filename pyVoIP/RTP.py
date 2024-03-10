@@ -215,6 +215,10 @@ class RTPPacketManager:
         self.buffer.seek(bufferloc, 0)
         self.bufferLock.release()
 
+    def reset(self, data):
+        self.bufferLock.acquire()
+        self.rebuild(True, 0, data)
+        self.bufferLock.release()
 
 class RTPMessage:
     def __init__(self, data: bytes, assoc: Dict[int, PayloadType]):
@@ -374,6 +378,9 @@ class RTPClient:
     def write(self, data: bytes) -> None:
         self.pmout.write(self.outOffset, data)
         self.outOffset += len(data)
+
+    def reset(self, data: bytes) -> None:
+        return self.pmout.reset(data)
 
     def recv(self) -> None:
         while self.NSD:
