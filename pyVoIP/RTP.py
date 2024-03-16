@@ -220,6 +220,11 @@ class RTPPacketManager:
         self.rebuild(True, 0, data)
         self.bufferLock.release()
 
+    @property
+    def idle(self):
+        nbytes = self.buffer.getbuffer().nbytes
+        return nbytes == self.buffer.tell()
+
 class RTPMessage:
     def __init__(self, data: bytes, assoc: Dict[int, PayloadType]):
         self.RTPCompatibleVersions = pyVoIP.RTPCompatibleVersions
@@ -381,6 +386,10 @@ class RTPClient:
 
     def reset(self, data: bytes) -> None:
         return self.pmout.reset(data)
+
+    @property
+    def idle(self):
+        return self.pmout.idle
 
     def recv(self) -> None:
         while self.NSD:

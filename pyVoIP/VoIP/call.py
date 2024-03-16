@@ -556,6 +556,10 @@ class VoIPCall:
         for x in self.RTPClients:
             x.reset(data)
 
+    @property
+    def idle(self):
+        return sum([x.idle and 1 or 0 for x in self.RTPClients]) == len(self.RTPClients)
+
     def read_audio(self, length=160, blocking=True) -> bytes:
         if len(self.RTPClients) == 1:
             return self.RTPClients[0].read(length, blocking)
