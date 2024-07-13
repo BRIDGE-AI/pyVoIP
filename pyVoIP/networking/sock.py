@@ -420,6 +420,8 @@ class VoIPSocket(threading.Thread):
                 continue
             debug(f"Received new {self.mode} connection from {addr}.")
             data = conn.recv(8192)
+            if data is None:
+                continue
             try:
                 message = SIPMessage.from_bytes(data)
             except SIPParseError:
@@ -434,12 +436,13 @@ class VoIPSocket(threading.Thread):
                 data = self.s.recv(8192)
             except OSError:
                 continue
+            if data is None:
+                continue
             try:
                 message = SIPMessage.from_bytes(data)
             except SIPParseError:
                 continue
-            debug("\n\nReceived UDP Message:")
-            debug(message.summary())
+            debug(f"Received UDP Message:\n{message.summary()}")
             self._handle_incoming_message(None, message)
 
     def _handle_incoming_message(
