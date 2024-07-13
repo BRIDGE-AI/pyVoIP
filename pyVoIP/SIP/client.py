@@ -804,7 +804,11 @@ class SIPClient:
         sendtype: "RTP.TransmitType",
         branch: str,
         call_id: str,
+        callback_ip: Optional[str] = None
     ) -> str:
+        callback_ip = callback_ip or self.bind_ip
+        debug(f"callback_ip:{callback_ip}")
+
         # Generate body first for content length
         body = "v=0\r\n"
         body += (
@@ -812,7 +816,7 @@ class SIPClient:
             + f"{self.nat.bind_ip.version} {self.bind_ip}\r\n"
         )
         body += f"s=pyVoIP {pyVoIP.__version__}\r\n"
-        body += f"c=IN IP{self.nat.bind_ip.version} {self.bind_ip}\r\n"
+        body += f"c=IN IP{self.nat.bind_ip.version} {callback_ip}\r\n"
         body += "t=0 0\r\n"
         for x in ms:
             # TODO: Check AVP mode from request
@@ -1107,12 +1111,13 @@ class SIPClient:
         number: str,
         ms: Dict[int, Dict[int, "RTP.PayloadType"]],
         sendtype: "RTP.TransmitType",
+        callback_ip: Optional[str] = "0.0.0.0",
     ) -> Tuple[SIPMessage, str, int, "VoIPConnection"]:
         branch = "z9hG4bK" + self.gen_call_id()[0:25]
         call_id = self.gen_call_id()
         sess_id = self.sessID.next()
         invite = self.gen_invite(
-            number, str(sess_id), ms, sendtype, branch, call_id
+            number, str(sess_id), ms, sendtype, branch, call_id, callback_ip
         )
         conn = self.sendto(invite)
         debug("Invited")
@@ -1150,7 +1155,7 @@ class SIPClient:
         auth = self.gen_authorization(response)
 
         invite = self.gen_invite(
-            number, str(sess_id), ms, sendtype, branch, call_id
+            number, str(sess_id), ms, sendtype, branch, call_id, callback_ip
         )
         invite = invite.replace(
             "\r\nContent-Length", f"\r\n{auth}Content-Length"

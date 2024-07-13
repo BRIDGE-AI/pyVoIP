@@ -46,6 +46,7 @@ class VoIPPhoneParameter:
     rtp_port_high: Optional[int] = 20000
     call_class: Type[VoIPCall] = None
     sip_class: Type[SIPClient] = None
+    callback_ip: Optional[str] = None
 
 
 class VoIPPhone:
@@ -101,6 +102,7 @@ class VoIPPhone:
             fatal_callback=self.fatal,
             transport_mode=self.voip_phone_parameter.transport_mode,
         )
+        self.callback_ip = self.voip_phone_parameter.callback_ip
 
     def callback(
         self, conn: VoIPConnection, request: SIPMessage
@@ -317,7 +319,10 @@ class VoIPPhone:
         self,
         number: str,
         payload_types: Optional[List[RTP.PayloadType]] = None,
+        callback_ip: Optional[str] = None
     ) -> VoIPCall:
+        callback_ip = callback_ip or self.callback_ip
+
         port = self.request_port()
         medias = {}
         if not payload_types:
@@ -337,7 +342,7 @@ class VoIPPhone:
                 dynamic_int += 1
         debug(f"Making call with {medias=}")
         request, call_id, sess_id, conn = self.sip.invite(
-            number, medias, RTP.TransmitType.SENDRECV
+            number, medias, RTP.TransmitType.SENDRECV, callback_ip
         )
         self.calls[call_id] = self.call_class(
             self,
