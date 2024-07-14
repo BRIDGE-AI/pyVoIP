@@ -806,7 +806,7 @@ class SIPClient:
         call_id: str,
         callback_ip: Optional[str] = None
     ) -> str:
-        callback_ip = callback_ip or self.bind_ip
+        callback_ip = callback_ip or self.nat.remote_hostname or self.bind_ip
         debug(f"callback_ip:{callback_ip}")
 
         # Generate body first for content length
