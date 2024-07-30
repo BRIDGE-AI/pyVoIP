@@ -98,6 +98,7 @@ class VoIPCall:
                 message = SIPMessage.from_bytes(data)
             except SIPParseError:
                 continue
+            #debug(f"call.receiver {type(message)}:\n{message.summary()}")
             if type(message) is SIPResponse:
                 if message.status is ResponseCode.OK:
                     if self.state in [
@@ -107,6 +108,12 @@ class VoIPCall:
                     ]:
                         self.answered(message)
                 elif message.status == ResponseCode.NOT_FOUND:
+                    pass
+                elif message.status == ResponseCode.INTERNAL_SERVER_ERROR:
+                    debug(f"Received Internal-Server-Error Message: {message}")
+                    pass
+                elif message.status == ResponseCode.FORBIDDEN:
+                    debug(f"Received Forbidden Message: {message}")
                     pass
             else:
                 if message.method == SIPMethod.BYE:

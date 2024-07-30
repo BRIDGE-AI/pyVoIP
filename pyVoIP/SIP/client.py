@@ -153,6 +153,7 @@ class SIPClient:
             self.call_callback(conn, message)
 
     def parse_message(self, message: SIPMessage) -> None:
+        #debug(f"parse_message({type(message)}):\n{message.summary()}")
         if type(message) is SIPResponse:
             if message.status in (
                 ResponseCode.OK,
@@ -1133,17 +1134,17 @@ class SIPClient:
         ):
             if not self.NSD:
                 break
-            debug(f"Received Response: {response.summary()}")
+            debug(f"Received Invite Response:\n{response.summary()}")
             self.parse_message(response)
             response = SIPMessage.from_bytes(conn.recv(8192))
 
-        debug(f"Received Response: {response.summary()}")
+        debug(f"Received Invite Response:\n{response.summary()}")
 
         if (
             type(response) is SIPResponse
             and response.status in INVITE_OK_RESPONSE_CODES
         ):
-            debug("Invite Accepted")
+            debug(f"Invite Accepted: {response.status}")
             if response.status is ResponseCode.OK:
                 return response, call_id, sess_id, conn
             return SIPMessage.from_string(invite), call_id, sess_id, conn

@@ -70,7 +70,7 @@ class VoIPConnection:
             self.sock.s.sendto(data, addr)
         else:
             self.conn.send(data)
-        debug(f"SENT:\n{msg.summary()}")
+        debug(f"SENT:\n{msg.summary()}", trace=False)
 
     def update_tags(self, local_tag: str, remote_tag: str) -> None:
         self.local_tag = local_tag
@@ -116,6 +116,8 @@ class VoIPConnection:
 
         timeout = time.monotonic() + timeout if timeout else math.inf
         while time.monotonic() <= timeout and not self.sock.SD:
+            #time.sleep(0.5) # DEBUG
+
             # print("Trying to receive")
             # print(self.sock.get_database_dump())
             conn = self.sock.buffer.cursor()
@@ -140,12 +142,15 @@ class VoIPConnection:
                     sql += " AND " + f'"type" IS NOT ?'
                     bindings.append(ignore)
 
+                #debug(f"sql:{sql}, peak:{peak}")
                 result = conn.execute(sql, bindings)
                 row = result.fetchone()
 
                 if not row:
                     conn.close()
                     continue
+
+                #debug(f"peak: {peak}, row:\n{row['msg']}", trace=True)
                 if peak:
                     # If peaking, return before deleting from the database
                     conn.close()
@@ -442,7 +447,7 @@ class VoIPSocket(threading.Thread):
                 message = SIPMessage.from_bytes(data)
             except SIPParseError:
                 continue
-            debug(f"Received UDP Message:\n{message.summary()}")
+            debug(f"Received UDP Message:\n{message.summary()}", trace=False)
             self._handle_incoming_message(None, message)
 
     def _handle_incoming_message(
