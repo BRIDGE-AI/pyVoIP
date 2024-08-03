@@ -399,13 +399,13 @@ class VoIPSocket(threading.Thread):
 
         to_header = message.headers["To"]
         from_header = message.headers["From"]
-        to_host = to_header["host"]
         to_tag = to_header["tag"] if to_header["tag"] else None
         from_tag = from_header["tag"] if from_header["tag"] else None
 
-        if self.nat.check_host(to_host) is AddressType.LOCAL:
-            return to_tag, from_tag
-        return from_tag, to_tag
+        from_host = from_header["host"]
+        if self.nat.check_host(from_host) is AddressType.LOCAL:
+            return from_tag, to_tag
+        return to_tag, from_tag
 
     def bind(self, addr: Tuple[str, int]) -> None:
         self.s.bind(addr)
