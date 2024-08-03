@@ -70,6 +70,9 @@ class SIPMessage:
 
     @staticmethod
     def from_bytes(data: bytes) -> Union["SIPRequest", "SIPResponse"]:
+        if data is None:
+            raise RuntimeError(f"Specified data is {data}.")
+
         parsed_headers: Dict[str, Any] = {"Via": []}
         parsed_body: Dict[str, Any] = {}
         authentication: Dict[str, Union[str, List[str]]] = {}
