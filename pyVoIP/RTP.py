@@ -309,6 +309,7 @@ class RTPClient:
         out_port: int,
         sendrecv: TransmitType,
         dtmf: Optional[Callable[[str], None]] = None,
+        call = None,
     ):
         self.NSD = True
         # Example: {0: PayloadType.PCMU, 101: PayloadType.EVENT}
@@ -342,6 +343,8 @@ class RTPClient:
         self.outSequence = random.randint(1, 100)
         self.outTimestamp = random.randint(1, 10000)
         self.outSSRC = random.randint(1000, 65530)
+
+        self.call = call
 
     def start(self) -> None:
         self.sin = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -407,6 +410,8 @@ class RTPClient:
         while self.NSD:
             last_sent = time.monotonic_ns()
             payload = self.pmout.read()
+            if hasattr(self.call, 'on_trans') and self.call.on_trans:
+                self.call.on_trans(payload)
             payload = self.encode_packet(payload)
             packet = b"\x80"  # RFC 1889 V2 No Padding Extension or CC.
             packet += chr(int(self.preference)).encode("utf8")

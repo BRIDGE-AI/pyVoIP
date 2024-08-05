@@ -242,6 +242,7 @@ class VoIPCall:
                 baseport + ii,
                 self.sendmode,
                 dtmf=self.dtmf_callback,
+                call=self,
             )
             self.RTPClients.append(c)
 
