@@ -38,6 +38,7 @@ class CallState(Enum):
     ANSWERED = "ANSWERED"
     CANCELING = "CANCELING"
     ENDED = "ENDED"
+    DENIED = "DENIED"
 
 
 class VoIPCall:
@@ -113,6 +114,7 @@ class VoIPCall:
                     debug(f"Received Internal-Server-Error Message: {message}")
                     pass
                 elif message.status == ResponseCode.FORBIDDEN:
+                    self.denied(message)
                     debug(f"Received Forbidden Message: {message}")
                     pass
             else:
@@ -444,6 +446,12 @@ class VoIPCall:
         self.state = CallState.ANSWERED
         ack = self.phone.sip.gen_ack(request)
         self.conn.send(ack)
+
+    def denied(self, request: SIPMessage) -> None:
+        #ack = self.phone.sip.gen_ack(request)
+        #self.conn.send(ack)
+        self.state = CallState.DENIED
+        return
 
     def progress(self, request: SIPMessage) -> None:
         if self.state != CallState.DIALING:
