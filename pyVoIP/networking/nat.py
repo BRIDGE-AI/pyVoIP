@@ -38,6 +38,10 @@ class NAT:
             except socket.gaierror:
                 raise NATError(f"Unable to resolve hostname {host}")
 
+        # trial
+        #if self.remote_hostname is not None:
+        #    return self.remote_hostname
+
         if ip in self.network:
             return self.hostname
         else:

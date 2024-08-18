@@ -815,6 +815,7 @@ class SIPClient:
         body += (
             f"o=pyVoIP {sess_id} {int(sess_id) + 2} IN IP"
             + f"{self.nat.bind_ip.version} {self.bind_ip}\r\n"
+            #+ f"{self.nat.bind_ip.version} {callback_ip}\r\n" # trial
         )
         body += f"s=pyVoIP {pyVoIP.__version__}\r\n"
         body += f"c=IN IP{self.nat.bind_ip.version} {callback_ip}\r\n"
