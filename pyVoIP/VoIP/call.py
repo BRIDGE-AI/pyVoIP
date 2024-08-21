@@ -134,9 +134,9 @@ class VoIPCall:
     def init_incoming_call(self, request: SIPMessage):
         audio = []
         video = []
-        for x in self.request.body["c"]:
+        for x in self.request.body.get("c", []):
             self.connections += x["address_count"]
-        for x in self.request.body["m"]:
+        for x in self.request.body.get("m", []):
             if x["type"] == "audio":
                 self.audioPorts += x["port_count"]
                 audio.append(x)
