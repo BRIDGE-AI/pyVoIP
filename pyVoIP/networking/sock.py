@@ -67,10 +67,17 @@ class VoIPConnection:
                 addr = (msg.destination["host"], msg.destination["port"])
             else:
                 addr = msg.headers["Via"][0]["address"]
-            self.sock.s.sendto(data, addr)
+            try:
+                self.sock.s.sendto(data, addr)
+            except Exception as error:
+                debug(f"data:{data}")
+                debug(f"addr:{addr}")
+                debug(f"ERROR:{error}", trace=True)
+                return False
         else:
             self.conn.send(data)
         debug(f"SENT:\n{msg.summary()}", trace=False)
+        return True
 
     def update_tags(self, local_tag: str, remote_tag: str) -> None:
         self.local_tag = local_tag
