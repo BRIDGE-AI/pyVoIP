@@ -166,7 +166,7 @@ class VoIPCall:
             warnings.warn("Unable to assign ports for RTP.", stacklevel=2)
             return
 
-        for i in request.body["m"]:
+        for i in request.body.get("m", []):
             if i["type"] == "video":  # Disable Video
                 continue
             assoc = {}
