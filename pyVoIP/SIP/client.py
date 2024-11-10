@@ -1243,7 +1243,10 @@ class SIPClient:
                 request.headers["Contact"]["port"],
             ),
         )
-        response = SIPMessage.from_bytes(conn.recv(8192))
+        data = conn.recv(8192)
+        if data is None:
+            return
+        response = SIPMessage.from_bytes(data)
         if response.status == ResponseCode(
             401
         ) or response.status == ResponseCode(407):

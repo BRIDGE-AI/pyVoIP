@@ -582,6 +582,8 @@ class VoIPCall:
         data = []
         for x in self.RTPClients:
             data.append(x.read(length))
+        if not data:
+            return b''
         # Mix audio from different sources before returning
         nd = audioop.add(data.pop(0), data.pop(0), 1)
         for d in data:
