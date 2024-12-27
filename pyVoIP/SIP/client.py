@@ -1276,7 +1276,7 @@ class SIPClient:
 
             return deregistered
         except BaseException as e:
-            debug(f"DEREGISTERATION ERROR: {e}")
+            debug(f"DEREGISTERATION ERROR: {e}", trace=True)
             # TODO: a maximum tries check should be implemented otherwise a
             # RecursionError will throw
             if isinstance(e, RetryRequiredError):
@@ -1295,14 +1295,20 @@ class SIPClient:
         first_response = response
         conn.close()  # Regardless of the response, the dialog is over
 
-        if response.status == ResponseCode(
-            401
-        ) or response.status == ResponseCode(407):
+        debug("=" * 50)
+        debug(f"SENT:{first_request}")
+        debug(f"RECEIVED:{first_response.summary()}")
+
+        if response.status == ResponseCode(401) or response.status == ResponseCode(407):
             # Unauthorized, likely due to being password protected.
             password_request = self.gen_register(response, deregister=True)
             conn = self.send(password_request)
             response = self.__receive(conn)
             conn.close()
+
+            debug(f"SENT 2:{password_request}")
+            debug(f"RECEIVED 2:{response.summary()}")
+        debug("=" * 50)
 
         if response.status == ResponseCode(400):
             # Bad Request
@@ -1320,22 +1326,10 @@ class SIPClient:
         elif response.status == ResponseCode.OK:
             return True
 
-        elif response.status == ResponseCode(
-            401
-        ) or response.status == ResponseCode(407):
+        elif response.status == ResponseCode(401) or response.status == ResponseCode(407):
             # At this point, it's reasonable to assume that
             # this is caused by invalid credentials.
-            debug("=" * 50)
-            debug("Unauthorized deregister, SIP Message Log:\n")
-            debug("SENT")
-            debug(first_request)
-            debug("\nRECEIVED")
-            debug(first_response.summary())
-            debug("\nSENT (DO NOT SHARE THIS PACKET)")
-            debug(password_request)
-            debug("\nRECEIVED")
-            debug(response.summary())
-            debug("=" * 50)
+            debug("Unauthorized deregister")
             raise InvalidAccountInfoError(
                 f"Invalid Username or Password for SIP server {self.server}:"
                 + f"{self.bind_port}"
@@ -1364,7 +1358,7 @@ class SIPClient:
 
             return registered
         except BaseException as e:
-            debug(f"REGISTERATION ERROR: {e}")
+            debug(f"REGISTERATION ERROR: {e}", trace=True)
             self.register_failures += 1
             if self.register_failures >= pyVoIP.REGISTER_FAILURE_THRESHOLD:
                 self.stop()
@@ -1395,14 +1389,20 @@ class SIPClient:
         first_response = response
         conn.close()  # Regardless of the response, the dialog is over
 
-        if response.status == ResponseCode(
-            401
-        ) or response.status == ResponseCode(407):
+        debug("=" * 50)
+        debug(f"SENT:{first_request}")
+        debug(f"RECEIVED:{first_response.summary()}")
+
+        if response.status == ResponseCode(401) or response.status == ResponseCode(407):
             # Unauthorized, likely due to being password protected.
             password_request = self.gen_register(response)
             conn = self.send(password_request)
             response = self.__receive(conn)
             conn.close()
+
+            debug(f"SENT 2:{password_request}")
+            debug(f"RECEIVED 2:{response.summary()}")
+        debug("=" * 50)
 
         if response.status == ResponseCode(400):
             # Bad Request
@@ -1418,22 +1418,10 @@ class SIPClient:
         elif response.status == ResponseCode.OK:
             return True
 
-        elif response.status == ResponseCode(
-            401
-        ) or response.status == ResponseCode(407):
+        elif response.status == ResponseCode(401) or response.status == ResponseCode(407):
             # At this point, it's reasonable to assume that
             # this is caused by invalid credentials.
-            debug("=" * 50)
-            debug("Unauthorized, SIP Message Log:\n")
-            debug("SENT")
-            debug(first_request)
-            debug("\nRECEIVED")
-            debug(first_response.summary())
-            debug("\nSENT (DO NOT SHARE THIS PACKET)")
-            debug(password_request)
-            debug("\nRECEIVED")
-            debug(response.summary())
-            debug("=" * 50)
+            debug("Unauthorized")
             raise InvalidAccountInfoError(
                 f"Invalid Username or Password for SIP server {self.server}:"
                 + f"{self.bind_port}"

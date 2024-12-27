@@ -293,7 +293,8 @@ class VoIPPhone:
         try:
             self.sip.start()
             self.NSD = True
-        except Exception:
+        except Exception as error:
+            debug(f"PHONE START ERROR: {error}")
             self._status = PhoneStatus.FAILED
             self.sip.stop()
             self.NSD = False
