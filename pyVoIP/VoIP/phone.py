@@ -302,9 +302,12 @@ class VoIPPhone:
 
     def stop(self, failed=False) -> None:
         self._status = PhoneStatus.DEREGISTERING
-        for x in self.calls.copy():
+        for call_id in self.calls.copy():
+            if call_id not in self.calls:
+                continue
+
             try:
-                self.calls[x].hangup()
+                self.calls[call_id].hangup()
             except InvalidStateError:
                 pass
         self.sip.stop()
