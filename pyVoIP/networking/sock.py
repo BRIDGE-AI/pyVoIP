@@ -55,6 +55,8 @@ class VoIPConnection:
 
         self.recv_lock = threading.Lock()
 
+        self._stop = False
+
     def send(self, data: Union[bytes, str]) -> None:
         if type(data) is str:
             data = data.encode("utf8")
@@ -125,6 +127,10 @@ class VoIPConnection:
         while time.monotonic() <= timeout and not self.sock.SD:
             #time.sleep(0.5) # DEBUG
 
+            if self._stop:
+                #debug("<<" + "-" * 20 + "STOP" + "-" * 20 + ">>")
+                return None
+
             # print("Trying to receive")
             # print(self.sock.get_database_dump())
             conn = self.sock.buffer.cursor()
@@ -176,6 +182,9 @@ class VoIPConnection:
         self.sock.deregister_connection(self)
         if self.conn:
             self.conn.close()
+
+    def stop(self):
+        self._stop = True
 
 
 class VoIPSocket(threading.Thread):

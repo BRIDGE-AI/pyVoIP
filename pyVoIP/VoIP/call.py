@@ -532,6 +532,7 @@ class VoIPCall:
     def hangup(self) -> None:
         if self.state != CallState.ANSWERED:
             raise InvalidStateError("Call is not answered")
+        self.conn.stop()
         for x in self.RTPClients:
             x.stop()
         self.sip.bye(self.request)
