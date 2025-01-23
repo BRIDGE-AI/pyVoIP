@@ -125,7 +125,7 @@ class VoIPConnection:
 
         timeout = time.monotonic() + timeout if timeout else math.inf
         while time.monotonic() <= timeout and not self.sock.SD:
-            #time.sleep(0.5) # DEBUG
+            time.sleep(0) # yield
 
             if self._stop:
                 #debug("<<" + "-" * 20 + "STOP" + "-" * 20 + ">>")
