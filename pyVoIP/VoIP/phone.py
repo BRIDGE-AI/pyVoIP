@@ -47,6 +47,7 @@ class VoIPPhoneParameter:
     call_class: Type[VoIPCall] = None
     sip_class: Type[SIPClient] = None
     callback_ip: Optional[str] = None
+    ignores: Optional[List[Dict]] = None
 
 
 class VoIPPhone:
@@ -136,36 +137,120 @@ class VoIPPhone:
     def get_status(self) -> PhoneStatus:
         return self._status
 
+    def _chk_obj(self, request, key, val):
+        toks = [tok.strip() for tok in key.split("/") if tok.strip()]
+        if not toks:
+            return False
+
+        target = request.headers
+        for tok in toks:
+            if not target:
+                return False
+
+            if tok not in target:
+                return False
+
+            target = target[tok]
+
+        if not target:
+            return False
+
+        return target == val
+
+    def _chk_condition(self, request, cnd):
+        should_hit = 0
+        hit = 0
+        for key in cnd:
+            key = key.strip()
+            val = cnd[key]
+
+            debug(f"key:{key}")
+            if not key:
+                continue
+
+            should_hit += 1
+
+            # handles for custom cases starting with '#'
+            if key.startswith("#"):
+                key = key.lower()
+
+                if key == "#from":
+                    if request.headers["From"]["user"] == val:
+                        hit += 1
+                    continue
+
+                if key == "#equal-from-to":
+                    if request.headers["From"]["user"] == request.headers["To"]["user"]:
+                        hit += 1
+                    continue
+
+                if key == "#not-in-to-list":
+                    if request.headers["To"]["user"] not in val:
+                        hit += 1
+                    continue
+
+                # adds custom cases below
+
+                continue
+
+            # handles for object cases
+            if self._chk_obj(request, key, val):
+                hit += 1
+
+        return should_hit > 0 and should_hit == hit
+
+    def ignorable(self, request):
+        if not self.voip_phone_parameter.ignores:
+            return None
+
+        for cnd_item in self.voip_phone_parameter.ignores:
+            if self._chk_condition(request, cnd_item):
+                return cnd_item
+            pass
+
+        return None
+
     def _callback_MSG_Invite(
         self, conn: VoIPConnection, request: SIPMessage
     ) -> None:
-        call_id = request.headers["Call-ID"]
         if self.call_class is None:
             message = self.sip.gen_busy(request)
             conn.send(message)
-        else:
-            debug("New call!")
-            sess_id = None
-            while sess_id is None:
-                proposed = random.randint(1, 100000)
-                if proposed not in self.session_ids:
-                    self.session_ids.append(proposed)
-                    sess_id = proposed
-            message = self.sip.gen_ringing(request)
-            conn.send(message)
-            call = self._create_call(conn, request, sess_id)
-            try:
-                t = Timer(1, call.ringing, [request])
-                t.name = f"Phone Call: {call_id}"
-                t.start()
-                self.threads.append(t)
-                self.threadLookup[t] = call_id
-            except Exception:
-                message = self.sip.gen_busy(request)
-                conn.send(
-                    message,
-                )
-                raise
+            return
+
+        #data = b'INVITE sip:100@43.202.127.199 SIP/2.0\r\nVia: SIP/2.0/UDP 162.217.96.20:0;branch=z9hG4bK-1366198931;rport\r\nMax-Forwards: 70\r\nTo: "PBX"<sip:100@1.1.1.1>\r\nFrom: "PBX"<sip:100@1.1.1.1>;tag=3262636137666337313363340133383939323732353135\r\nUser-Agent: friendly-scanner\r\nCall-ID: 1004141963740939812350326\r\nContact: sip:100@162.217.96.20:0\r\nCSeq: 1 INVITE\r\nAccept: application/sdp\r\nContent-Length: 0\r\n\r\n'
+        #request = SIPMessage.from_bytes(data)
+        #debug(f"request:{request.summary()}")
+
+        cnd = self.ignorable(request)
+        if cnd is not None:
+            debug(f"ignored by condition:{cnd}")
+            return
+
+        debug("New call!")
+        sess_id = None
+        while sess_id is None:
+            proposed = random.randint(1, 100000)
+            if proposed not in self.session_ids:
+                self.session_ids.append(proposed)
+                sess_id = proposed
+        message = self.sip.gen_ringing(request)
+        conn.send(message)
+        call = self._create_call(conn, request, sess_id)
+
+        call_id = request.headers["Call-ID"]
+        try:
+            t = Timer(1, call.ringing, [request])
+            t.name = f"Phone Call: {call_id}"
+            t.start()
+            self.threads.append(t)
+            self.threadLookup[t] = call_id
+        except Exception:
+            message = self.sip.gen_busy(request)
+            conn.send(
+                message,
+            )
+            raise
 
     def _callback_MSG_Bye(self, request: SIPMessage) -> None:
         debug("BYE recieved")
