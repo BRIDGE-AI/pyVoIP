@@ -523,3 +523,29 @@ class VoIPSocket(threading.Thread):
         conn = VoIPConnection(self, s, SIPMessage.from_bytes(data))
         conn.send(data)
         return conn
+
+    def delete_msg(self, call_id, conn=None):
+        _conn = conn
+
+        if _conn is None:
+            conn = self.buffer.cursor()
+            conn.row_factory = sqlite3.Row
+
+        result = conn.execute('SELECT * FROM "msgs" WHERE "call_id" = ?;', (call_id,))
+        result2 = result.fetchall()
+
+        ret = "msgs: " + pprint.pformat(result2)
+
+        try:
+            conn.execute('DELETE FROM "listening" WHERE "call_id" = ?', (call_id,))
+        except sqlite3.OperationalError as error:
+            pass
+
+        try:
+            conn.execute('DELETE FROM "msgs" WHERE "call_id" = ?', (call_id,))
+        except sqlite3.OperationalError as error:
+            pass
+
+        if _conn is None:
+            conn.close()
+

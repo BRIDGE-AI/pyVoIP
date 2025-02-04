@@ -218,6 +218,8 @@ class VoIPPhone:
             conn.send(message)
             return
 
+        call_id = request.headers["Call-ID"]
+
         #data = b'INVITE sip:100@43.202.127.199 SIP/2.0\r\nVia: SIP/2.0/UDP 162.217.96.20:0;branch=z9hG4bK-1366198931;rport\r\nMax-Forwards: 70\r\nTo: "PBX"<sip:100@1.1.1.1>\r\nFrom: "PBX"<sip:100@1.1.1.1>;tag=3262636137666337313363340133383939323732353135\r\nUser-Agent: friendly-scanner\r\nCall-ID: 1004141963740939812350326\r\nContact: sip:100@162.217.96.20:0\r\nCSeq: 1 INVITE\r\nAccept: application/sdp\r\nContent-Length: 0\r\n\r\n'
         #request = SIPMessage.from_bytes(data)
         #debug(f"request:{request.summary()}")
@@ -225,6 +227,7 @@ class VoIPPhone:
         cnd = self.ignorable(request)
         if cnd is not None:
             debug(f"ignored by condition:{cnd}")
+            conn.sock.delete_msg(call_id)
             return
 
         debug("New call!")
