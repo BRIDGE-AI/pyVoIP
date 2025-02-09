@@ -392,7 +392,7 @@ class VoIPSocket(threading.Thread):
 
     def get_database_dump(self, pretty=False) -> str:
         conn = self.buffer.cursor()
-        ret = ""
+        lines = ["database_dump:"]
         try:
             result = conn.execute('SELECT * FROM "listening";')
             result1 = result.fetchall()
@@ -401,12 +401,16 @@ class VoIPSocket(threading.Thread):
         finally:
             conn.close()
         if pretty:
-            ret += "listening: " + pprint.pformat(result1) + "\n\n"
-            ret += "msgs: " + pprint.pformat(result2) + "\n\n"
+            lines.append("listening: " + pprint.pformat(result1))
+            lines.append("")
+            lines.append("msgs: " + pprint.pformat(result2))
         else:
-            ret += "listening: " + json.dumps(result1) + "\n\n"
-            ret += "msgs: " + json.dumps(result2) + "\n\n"
-        return ret
+            lines.append(f"listening[{len(result1)}]:")
+            lines.extend(["  " + json.dumps(item) for item in result1])
+            lines.append("")
+            lines.append(f"msgs[{len(result2)}]:")
+            lines.extend(["  " + json.dumps(item) for item in result2])
+        return "\n".join(lines)
 
     def determine_tags(self, message: SIPMessage) -> Tuple[str, str]:
         """
@@ -447,7 +451,7 @@ class VoIPSocket(threading.Thread):
                 message = SIPMessage.from_bytes(data)
             except SIPParseError:
                 continue
-            debug("\n\nReceived SIP Message:")
+            debug("\n\nRECEIVED SIP Message:")
             debug(message.summary())
             self._handle_incoming_message(conn, message)
 
@@ -463,7 +467,7 @@ class VoIPSocket(threading.Thread):
                 message = SIPMessage.from_bytes(data)
             except SIPParseError:
                 continue
-            debug(f"Received UDP Message:\n{message.summary()}", trace=False)
+            debug(f"RECEIVED UDP Message:\n{message.summary()}", trace=False)
             self._handle_incoming_message(None, message)
 
     def _handle_incoming_message(

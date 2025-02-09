@@ -1297,7 +1297,7 @@ class SIPClient:
 
         debug("=" * 50)
         debug(f"SENT:{first_request}")
-        debug(f"RECEIVED:{first_response.summary()}")
+        debug(f"RECEIVED:{first_response.summary()}", trace=True)
 
         if response.status == ResponseCode(401) or response.status == ResponseCode(407):
             # Unauthorized, likely due to being password protected.
@@ -1358,7 +1358,7 @@ class SIPClient:
 
             return registered
         except BaseException as e:
-            debug(f"REGISTERATION ERROR: {e}", trace=True)
+            debug(f"REGISTERATION ERROR: {e}", trace=True, thread_list=True)
             self.register_failures += 1
             if self.register_failures >= pyVoIP.REGISTER_FAILURE_THRESHOLD:
                 self.stop()
@@ -1391,7 +1391,7 @@ class SIPClient:
 
         debug("=" * 50)
         debug(f"SENT:{first_request}")
-        debug(f"RECEIVED:{first_response.summary()}")
+        debug(f"RECEIVED:{first_response.summary()}", trace=True)
 
         if response.status == ResponseCode(401) or response.status == ResponseCode(407):
             # Unauthorized, likely due to being password protected.

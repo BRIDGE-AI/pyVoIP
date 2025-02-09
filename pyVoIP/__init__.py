@@ -82,7 +82,7 @@ def set_tls_security(verify_mode: ssl.VerifyMode) -> None:
         TLS_VERIFY_MODE = verify_mode
 
 
-def debug(s, e=None):
+def debug(s, e=None, **kwargs):
     if DEBUG:
         print(s)
     elif e is not None:
