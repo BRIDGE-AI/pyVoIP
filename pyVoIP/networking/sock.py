@@ -149,6 +149,12 @@ class VoIPConnection:
                     self.remote_tag,
                 ]
 
+                #TODO: TRY
+                #https://github.com/BRIDGE-AI/bridge/issues/199#issuecomment-2646368741
+                # bot에 의해 bye할 때 등 send하는 conn과 recv하는 conn이 다른 경우가 있고 다를 수 있는 것으로 보임 - 일단 보류
+                #sql += ' AND connection IS ?'
+                #bindings.append(self.conn_id)
+
                 if type_:
                     sql += " AND " + f'"type" IS ?'
                     bindings.append(type_)
@@ -156,6 +162,10 @@ class VoIPConnection:
                 if ignore:
                     sql += " AND " + f'"type" IS NOT ?'
                     bindings.append(ignore)
+
+                #20250-02-10: uses only very recent message
+                #https://github.com/BRIDGE-AI/bridge/issues/199#issuecomment-2646368741
+                sql += " ORDER BY id DESC"
 
                 #debug(f"sql:{sql}, peak:{peak}")
                 result = conn.execute(sql, bindings)
@@ -248,7 +258,7 @@ class VoIPSocket(threading.Thread):
                 "local_tag" TEXT,
                 "remote_tag" TEXT,
                 "type" TEXT,
-                "connection" INTEGER NOT NULL UNIQUE,
+                "connection" INTEGER NOT NULL,
                 "msg" TEXT
             );"""
         )
