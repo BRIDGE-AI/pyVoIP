@@ -33,6 +33,8 @@ class VoIPConnection:
         Mimics a TCP connection when using UDP, and wraps a socket when
         using TCP or TLS.
         """
+        self.conn_id = 0
+
         self.sock = voip_sock
         self.conn = conn
         self.mode = self.sock.mode
@@ -246,6 +248,7 @@ class VoIPSocket(threading.Thread):
                 "local_tag" TEXT,
                 "remote_tag" TEXT,
                 "type" TEXT,
+                "connection" INTEGER NOT NULL UNIQUE,
                 "msg" TEXT
             );"""
         )
@@ -269,7 +272,7 @@ class VoIPSocket(threading.Thread):
         conn.close()
         self.conns_lock = threading.Lock()
         self.conns: Dict[int, VoIPConnection] = {}
-        self.conn_id = 0
+        self.recent_conn_id = 0
 
     def gen_bad_request(
         self, connection=None, message=None, error=None, received=None
@@ -323,8 +326,9 @@ class VoIPSocket(threading.Thread):
 
     def __register_connection(self, connection: VoIPConnection) -> int:
         self.conns_lock.acquire()
-        self.conn_id += 1
-        self.conns[self.conn_id] = connection
+        self.recent_conn_id += 1
+        self.conns[self.recent_conn_id] = connection
+        connection.conn_id = self.recent_conn_id
         try:
             conn = self.buffer.cursor()
             conn.execute(
@@ -336,7 +340,7 @@ class VoIPSocket(threading.Thread):
                     connection.call_id,
                     connection.local_tag,
                     connection.remote_tag,
-                    self.conn_id,
+                    connection.conn_id,
                 ),
             )
         except sqlite3.IntegrityError as e:
@@ -347,7 +351,7 @@ class VoIPSocket(threading.Thread):
             e.add_note("Internal Database Dump:\n" + self.get_database_dump())
             e.add_note(
                 f"({connection.call_id=}, {connection.local_tag=}, "
-                + f"{connection.remote_tag=}, {self.conn_id=})"
+                + f"{connection.remote_tag=}, {connection.conn_id=})"
             )
             raise
         except sqlite3.OperationalError:
@@ -355,7 +359,7 @@ class VoIPSocket(threading.Thread):
         finally:
             conn.close()
             self.conns_lock.release()
-            return self.conn_id
+            return connection.conn_id
 
     def deregister_connection(self, connection: VoIPConnection) -> None:
         if self.mode is not TransportMode.UDP:
@@ -479,26 +483,26 @@ class VoIPSocket(threading.Thread):
         debug(f"conn:{conn}")
         debug(f"message:\n{message.summary()}")
 
-        conn_id = None
-        if not self.__connection_exists(message):
-            conn_id = self.__register_connection(
-                VoIPConnection(self, conn, message)
-            )
-        debug(f"conn_id:{conn_id}")
+        conn_created = False
+        voip_conn = self.__get_connection(message)
+        if voip_conn is None:
+            voip_conn = VoIPConnection(self, conn, message)
+            conn_id = self.__register_connection(voip_conn)
+            conn_created = True
 
         type_ = message.start_line[0].split(" ")[0]
         call_id = message.headers["Call-ID"]
         local_tag, remote_tag = self.determine_tags(message)
         raw_message = message.raw.decode("utf8")
-        conn = self.buffer.cursor()
-        conn.execute(
-            "INSERT INTO msgs (call_id, local_tag, remote_tag, type, msg) "
-            + "VALUES (?, ?, ?, ?, ?)",
-            (call_id, local_tag, remote_tag, type_, raw_message),
+        cursor = self.buffer.cursor()
+        cursor.execute(
+            "INSERT INTO msgs (call_id, local_tag, remote_tag, type, connection, msg) "
+            + "VALUES (?, ?, ?, ?, ?, ?)",
+            (call_id, local_tag, remote_tag, type_, voip_conn.conn_id, raw_message),
         )
-        conn.close()
-        if conn_id:
-            self.sip.handle_new_connection(self.conns.get(conn_id, None))
+        cursor.close()
+        if conn_created:
+            self.sip.handle_new_connection(self.conns.get(voip_conn.conn_id, None))
 
     def start(self) -> None:
         self.bind((self.bind_ip, self.bind_port))
