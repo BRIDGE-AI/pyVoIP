@@ -268,7 +268,8 @@ class VoIPSocket(threading.Thread):
         )
         conn.close()
         self.conns_lock = threading.Lock()
-        self.conns: List[VoIPConnection] = []
+        self.conns: Dict[int, VoIPConnection] = {}
+        self.conn_id = 0
 
     def gen_bad_request(
         self, connection=None, message=None, error=None, received=None
@@ -299,7 +300,7 @@ class VoIPSocket(threading.Thread):
         rows = result.fetchall()
         if rows:
             conn.close()
-            return self.conns[rows[0][0]]
+            return self.conns.get(rows[0][0], None)
         debug("New Connection Started")
         # If we didn't find one lets look for something that doesn't have
         # one of the tags
@@ -313,16 +314,17 @@ class VoIPSocket(threading.Thread):
                 sql = 'UPDATE "listening" SET "remote_tag" = ?, '
                 sql += '"local_tag" = ? WHERE "connection" = ?'
                 conn.execute(sql, (remote_tag, local_tag, rows[0][0]))
-                self.conns[rows[0][0]].update_tags(local_tag, remote_tag)
+                self.conns.get(rows[0][0], None).update_tags(local_tag, remote_tag)
             conn.close()
-            return self.conns[rows[0][0]]
+            return self.conns.get(rows[0][0], None)
+        debug("No Connection in sqlite buffer")
         conn.close()
         return None
 
     def __register_connection(self, connection: VoIPConnection) -> int:
         self.conns_lock.acquire()
-        self.conns.append(connection)
-        conn_id = len(self.conns) - 1
+        self.conn_id += 1
+        self.conns[self.conn_id] = connection
         try:
             conn = self.buffer.cursor()
             conn.execute(
@@ -334,7 +336,7 @@ class VoIPSocket(threading.Thread):
                     connection.call_id,
                     connection.local_tag,
                     connection.remote_tag,
-                    conn_id,
+                    self.conn_id,
                 ),
             )
         except sqlite3.IntegrityError as e:
@@ -345,7 +347,7 @@ class VoIPSocket(threading.Thread):
             e.add_note("Internal Database Dump:\n" + self.get_database_dump())
             e.add_note(
                 f"({connection.call_id=}, {connection.local_tag=}, "
-                + f"{connection.remote_tag=}, {conn_id=})"
+                + f"{connection.remote_tag=}, {self.conn_id=})"
             )
             raise
         except sqlite3.OperationalError:
@@ -353,7 +355,7 @@ class VoIPSocket(threading.Thread):
         finally:
             conn.close()
             self.conns_lock.release()
-            return conn_id
+            return self.conn_id
 
     def deregister_connection(self, connection: VoIPConnection) -> None:
         if self.mode is not TransportMode.UDP:
@@ -380,7 +382,7 @@ class VoIPSocket(threading.Thread):
             """
             Need to set to None to not change the indexes of any other conn
             """
-            self.conns[conn_id] = None
+            self.conns.pop(conn_id, None)
             conn.execute(
                 'DELETE FROM "listening" WHERE "connection" = ?', (conn_id,)
             )
@@ -392,7 +394,7 @@ class VoIPSocket(threading.Thread):
 
     def get_database_dump(self, pretty=False) -> str:
         conn = self.buffer.cursor()
-        lines = ["database_dump:"]
+        lines = ["<<database_dump>>"]
         try:
             result = conn.execute('SELECT * FROM "listening";')
             result1 = result.fetchall()
@@ -473,11 +475,16 @@ class VoIPSocket(threading.Thread):
     def _handle_incoming_message(
         self, conn: Optional[SOCKETS], message: SIPMessage
     ):
+        debug(f"<<_handle_incoming_message>>")
+        debug(f"conn:{conn}")
+        debug(f"message:\n{message.summary()}")
+
         conn_id = None
         if not self.__connection_exists(message):
             conn_id = self.__register_connection(
                 VoIPConnection(self, conn, message)
             )
+        debug(f"conn_id:{conn_id}")
 
         type_ = message.start_line[0].split(" ")[0]
         call_id = message.headers["Call-ID"]
@@ -491,7 +498,7 @@ class VoIPSocket(threading.Thread):
         )
         conn.close()
         if conn_id:
-            self.sip.handle_new_connection(self.conns[conn_id])
+            self.sip.handle_new_connection(self.conns.get(conn_id, None))
 
     def start(self) -> None:
         self.bind((self.bind_ip, self.bind_port))
