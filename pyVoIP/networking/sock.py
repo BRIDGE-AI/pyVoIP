@@ -512,7 +512,7 @@ class VoIPSocket(threading.Thread):
         )
         cursor.close()
         if conn_created:
-            self.sip.handle_new_connection(self.conns.get(voip_conn.conn_id, None))
+            self.sip.handle_new_connection(voip_conn)
 
     def start(self) -> None:
         self.bind((self.bind_ip, self.bind_port))
