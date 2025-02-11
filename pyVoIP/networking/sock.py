@@ -491,19 +491,35 @@ class VoIPSocket(threading.Thread):
     ):
         debug(f"<<_handle_incoming_message>>")
         debug(f"conn:{conn}")
-        debug(f"message:\n{message.summary()}")
+        debug(f"message:\n{message.summary()}", trace=True)
+
+        call_id = message.headers["Call-ID"]
 
         conn_created = False
         voip_conn = self.__get_connection(message)
         if voip_conn is None:
             voip_conn = VoIPConnection(self, conn, message)
-            conn_id = self.__register_connection(voip_conn)
             conn_created = True
 
+        if type(message) is SIPRequest:
+            #TODO: DEBUG
+            #data = b'INVITE sip:100@43.202.127.199 SIP/2.0\r\nVia: SIP/2.0/UDP 162.217.96.20:0;branch=z9hG4bK-1366198931;rport\r\nMax-Forwards: 70\r\nTo: "PBX"<sip:100@1.1.1.1>\r\nFrom: "PBX"<sip:100@1.1.1.1>;tag=3262636137666337313363340133383939323732353135\r\nUser-Agent: friendly-scanner\r\nCall-ID: 1004141963740939812350326\r\nContact: sip:100@162.217.96.20:0\r\nCSeq: 1 INVITE\r\nAccept: application/sdp\r\nContent-Length: 0\r\n\r\n'
+            #message = SIPMessage.from_bytes(data)
+            #debug(f"message:{message.summary()}")
+
+            cnd = self.sip.phone.ignorable(message)
+            if cnd is not None:
+                debug(f"ignored by condition:{cnd}")
+                # 메세지를 sqlite에 넣기 전에 커트하도록 수정했기 때문에 명시적으로 delete_msg()하지 않음
+                return
+
+        # 조건에 맞아 ignore한다면 register하지 않음
+        conn_created and self.__register_connection(voip_conn)
+
         type_ = message.start_line[0].split(" ")[0]
-        call_id = message.headers["Call-ID"]
         local_tag, remote_tag = self.determine_tags(message)
         raw_message = message.raw.decode("utf8")
+
         cursor = self.buffer.cursor()
         cursor.execute(
             "INSERT INTO msgs (call_id, local_tag, remote_tag, type, connection, msg) "
@@ -511,8 +527,8 @@ class VoIPSocket(threading.Thread):
             (call_id, local_tag, remote_tag, type_, voip_conn.conn_id, raw_message),
         )
         cursor.close()
-        if conn_created:
-            self.sip.handle_new_connection(voip_conn)
+
+        conn_created and self.sip.handle_new_connection(voip_conn)
 
     def start(self) -> None:
         self.bind((self.bind_ip, self.bind_port))

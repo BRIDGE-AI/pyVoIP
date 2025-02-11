@@ -52,7 +52,9 @@ class SIPMessage:
         self.authentication = authentication
         self.raw = raw
 
-    def summary(self) -> str:
+    def summary(self, **kwargs) -> str:
+        raw_flag = kwargs.pop("raw", False)
+
         data = ""
         data += f"{' '.join(self.start_line)}\n\n"
         data += "Headers:\n"
@@ -62,9 +64,11 @@ class SIPMessage:
         data += "Body:\n"
         for x in self.body:
             data += f"{x}: {self.body[x]}\n"
-        data += "\n"
-        data += "Raw:\n"
-        data += str(self.raw)
+
+        if raw_flag:
+            data += "\n"
+            data += "Raw:\n"
+            data += str(self.raw)
 
         return data
 
