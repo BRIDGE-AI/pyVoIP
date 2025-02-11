@@ -489,10 +489,6 @@ class VoIPSocket(threading.Thread):
     def _handle_incoming_message(
         self, conn: Optional[SOCKETS], message: SIPMessage
     ):
-        debug(f"<<_handle_incoming_message>>")
-        debug(f"conn:{conn}")
-        debug(f"message:\n{message.summary()}", trace=True)
-
         call_id = message.headers["Call-ID"]
 
         conn_created = False
