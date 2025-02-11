@@ -565,6 +565,7 @@ class VoIPSocket(threading.Thread):
         conn.send(data)
         return conn
 
+    #TODO: deprecated
     def delete_msg(self, call_id, conn=None):
         _conn = conn
 
