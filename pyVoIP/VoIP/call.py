@@ -573,6 +573,14 @@ class VoIPCall:
         for x in self.RTPClients:
             x.reset(data)
 
+    def hold_audio(self, data: bytes = None) -> None:
+        for x in self.RTPClients:
+            x.hold(data)
+
+    def cont_audio(self) -> None:
+        for x in self.RTPClients:
+            x.cont()
+
     @property
     def idle(self):
         return sum([x.idle and 1 or 0 for x in self.RTPClients]) == len(self.RTPClients)

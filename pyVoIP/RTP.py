@@ -166,6 +166,8 @@ class RTPPacketManager:
         self.log = {}
         self.rebuilding = False
 
+        self._hold = None
+
     def read(self, length: int = 160) -> bytes:
         # This acts functionally as a lock while the buffer is being rebuilt.
         while self.rebuilding:
@@ -217,6 +219,7 @@ class RTPPacketManager:
 
     def reset(self, data):
         self.bufferLock.acquire()
+        self._hold = None
         self.rebuild(True, 0, data)
         self.bufferLock.release()
 
@@ -224,6 +227,44 @@ class RTPPacketManager:
     def idle(self):
         nbytes = self.buffer.getbuffer().nbytes
         return nbytes == self.buffer.tell()
+
+    def hold(self, packet: bytes = None):
+        self.bufferLock.acquire()
+
+        if packet is not None:
+            self._hold = packet
+            self.bufferLock.release()
+            return
+
+        nbytes = self.buffer.getbuffer().nbytes
+        if nbytes == 0:
+            self.bufferLock.release()
+            return
+
+        bufferloc = self.buffer.tell()
+
+        if nbytes == bufferloc:
+            return
+
+        bufferloc = max(0, bufferloc - 800)
+        self.buffer.seek(bufferloc, 0)
+        packet = self.buffer.read(nbytes - bufferloc)
+        self._hold = packet
+
+        self.bufferLock.release()
+
+    def cont(self):
+        if not self._hold:
+            return
+
+        self.bufferLock.acquire()
+
+        packet = self._hold
+        self._hold = None
+        self.rebuild(True, 0, packet)
+
+        self.bufferLock.release()
+        return
 
 class RTPMessage:
     def __init__(self, data: bytes, assoc: Dict[int, PayloadType]):
@@ -393,6 +434,12 @@ class RTPClient:
     @property
     def idle(self):
         return self.pmout.idle
+
+    def hold(self, packet: bytes = None):
+        return self.pmout.hold(packet)
+
+    def cont(self):
+        return self.pmout.cont()
 
     def recv(self) -> None:
         while self.NSD:
