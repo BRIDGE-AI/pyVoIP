@@ -447,7 +447,7 @@ class RTPClient:
                 packet = self.sin.recv(8192)
                 self.parse_packet(packet)
             except BlockingIOError:
-                time.sleep(0.01)
+                time.sleep(0.001)
             except RTPParseError as e:
                 debug(str(e))
             except OSError:
