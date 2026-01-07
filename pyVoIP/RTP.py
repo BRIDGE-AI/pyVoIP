@@ -168,14 +168,14 @@ class RTPPacketManager:
 
         self._hold = None
 
-    def read(self, length: int = 160) -> bytes:
+    def read(self, length: int = 320) -> bytes:
         # This acts functionally as a lock while the buffer is being rebuilt.
         while self.rebuilding:
             time.sleep(0.01)
         with self.bufferLock:
             packet = self.buffer.read(length)
             if len(packet) < length:
-                packet = packet + (b"\x80" * (length - len(packet)))
+                packet = packet + (b"\x00" * (length - len(packet)))
         return packet
 
     def rebuild(self, reset: bool, offset: int = 0, data: bytes = b"") -> None:
@@ -246,7 +246,7 @@ class RTPPacketManager:
         if nbytes == bufferloc:
             return
 
-        bufferloc = max(0, bufferloc - 800)
+        bufferloc = max(0, bufferloc - 1600)
         self.buffer.seek(bufferloc, 0)
         packet = self.buffer.read(nbytes - bufferloc)
         self._hold = packet
@@ -408,6 +408,7 @@ class RTPClient:
 
     def stop(self) -> None:
         self.NSD = False
+
         if hasattr(self, "sin"):
             if self.sin:
                 self.sin.close()
@@ -415,11 +416,11 @@ class RTPClient:
             if self.sout:
                 self.sout.close()
 
-    def read(self, length: int = 160, blocking: bool = True) -> bytes:
+    def read(self, length: int = 320, blocking: bool = True) -> bytes:
         if not blocking:
             return self.pmin.read(length)
         packet = self.pmin.read(length)
-        while packet == (b"\x80" * length) and self.NSD:
+        while packet == (b"\x00" * length) and self.NSD:
             time.sleep(0.01)
             packet = self.pmin.read(length)
         return packet
@@ -523,23 +524,19 @@ class RTPClient:
             )
 
     def parse_pcmu(self, packet: RTPMessage) -> None:
-        data = audioop.ulaw2lin(packet.payload, 1)
-        data = audioop.bias(data, 1, 128)
-        self.pmin.write(packet.timestamp, data)
+        data = audioop.ulaw2lin(packet.payload, 2)
+        self.pmin.write(packet.timestamp * 2, data)
 
     def encode_pcmu(self, packet: bytes) -> bytes:
-        packet = audioop.bias(packet, 1, -128)
-        packet = audioop.lin2ulaw(packet, 1)
+        packet = audioop.lin2ulaw(packet, 2)
         return packet
 
     def parse_pcma(self, packet: RTPMessage) -> None:
-        data = audioop.alaw2lin(packet.payload, 1)
-        data = audioop.bias(data, 1, 128)
-        self.pmin.write(packet.timestamp, data)
+        data = audioop.alaw2lin(packet.payload, 2)
+        self.pmin.write(packet.timestamp * 2, data)
 
     def encode_pcma(self, packet: bytes) -> bytes:
-        packet = audioop.bias(packet, 1, -128)
-        packet = audioop.lin2alaw(packet, 1)
+        packet = audioop.lin2alaw(packet, 2)
         return packet
 
     def parse_telephone_event(self, packet: RTPMessage) -> None:

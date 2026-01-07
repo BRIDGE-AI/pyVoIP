@@ -585,7 +585,7 @@ class VoIPCall:
     def idle(self):
         return sum([x.idle and 1 or 0 for x in self.RTPClients]) == len(self.RTPClients)
 
-    def read_audio(self, length=160, blocking=True) -> bytes:
+    def read_audio(self, length=320, blocking=True) -> bytes:
         if len(self.RTPClients) == 1:
             return self.RTPClients[0].read(length, blocking)
         data = []
@@ -594,7 +594,7 @@ class VoIPCall:
         if not data:
             return b''
         # Mix audio from different sources before returning
-        nd = audioop.add(data.pop(0), data.pop(0), 1)
+        nd = audioop.add(data.pop(0), data.pop(0), 2)
         for d in data:
-            nd = audioop.add(nd, d, 1)
+            nd = audioop.add(nd, d, 2)
         return nd
