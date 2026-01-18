@@ -68,7 +68,9 @@ class VoIPCall:
         self.dtmfLock = Lock()
         self.dtmf = io.StringIO()
 
+        # 에러 응답 수신 시에만 사용
         self.error_code: Optional[int] = None
+        self.error_response: Optional[SIPMessage] = None
 
         self.RTPClients: List[RTP.RTPClient] = []
 
@@ -472,6 +474,7 @@ class VoIPCall:
         #ack = self.phone.sip.gen_ack(request)
         #self.conn.send(ack)
         self.error_code = 403
+        self.error_response = request
         self.state = CallState.DENIED
         return
 
@@ -494,6 +497,7 @@ class VoIPCall:
         for x in self.RTPClients:
             x.stop()
         self.error_code = 404
+        self.error_response = request
         self.state = CallState.ENDED
         del self.phone.calls[self.request.headers["Call-ID"]]
         debug("Call not found and terminated")
@@ -520,6 +524,7 @@ class VoIPCall:
         for x in self.RTPClients:
             x.stop()
         self.error_code = 480
+        self.error_response = request
         self.state = CallState.ENDED
         del self.phone.calls[self.request.headers["Call-ID"]]
         debug("Call unavailable and terminated")
@@ -543,6 +548,7 @@ class VoIPCall:
         for x in self.RTPClients:
             x.stop()
         self.error_code = 400
+        self.error_response = request
         self.state = CallState.ENDED
         if self.request.headers["Call-ID"] in self.phone.calls:
             del self.phone.calls[self.request.headers["Call-ID"]]
@@ -558,6 +564,7 @@ class VoIPCall:
         for x in self.RTPClients:
             x.stop()
         self.error_code = 408
+        self.error_response = request
         self.state = CallState.ENDED
         if self.request.headers["Call-ID"] in self.phone.calls:
             del self.phone.calls[self.request.headers["Call-ID"]]
@@ -573,6 +580,7 @@ class VoIPCall:
         for x in self.RTPClients:
             x.stop()
         self.error_code = 487
+        self.error_response = request
         self.state = CallState.ENDED
         if self.request.headers["Call-ID"] in self.phone.calls:
             del self.phone.calls[self.request.headers["Call-ID"]]
@@ -588,6 +596,7 @@ class VoIPCall:
         for x in self.RTPClients:
             x.stop()
         self.error_code = 500
+        self.error_response = request
         self.state = CallState.ENDED
         if self.request.headers["Call-ID"] in self.phone.calls:
             del self.phone.calls[self.request.headers["Call-ID"]]
@@ -603,6 +612,7 @@ class VoIPCall:
         for x in self.RTPClients:
             x.stop()
         self.error_code = 503
+        self.error_response = request
         self.state = CallState.ENDED
         if self.request.headers["Call-ID"] in self.phone.calls:
             del self.phone.calls[self.request.headers["Call-ID"]]
@@ -618,6 +628,7 @@ class VoIPCall:
         for x in self.RTPClients:
             x.stop()
         self.error_code = 603
+        self.error_response = request
         self.state = CallState.ENDED
         if self.request.headers["Call-ID"] in self.phone.calls:
             del self.phone.calls[self.request.headers["Call-ID"]]
@@ -638,6 +649,7 @@ class VoIPCall:
                 self.error_code = int(request.status)
             else:
                 self.error_code = 486
+            self.error_response = request
             self.state = CallState.ENDED
             if self.request.headers["Call-ID"] in self.phone.calls:
                 del self.phone.calls[self.request.headers["Call-ID"]]
