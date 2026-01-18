@@ -68,6 +68,8 @@ class VoIPCall:
         self.dtmfLock = Lock()
         self.dtmf = io.StringIO()
 
+        self.error_code: Optional[int] = None
+
         self.RTPClients: List[RTP.RTPClient] = []
 
         self.connections = 0
@@ -99,7 +101,6 @@ class VoIPCall:
                 message = SIPMessage.from_bytes(data)
             except SIPParseError:
                 continue
-            #debug(f"call.receiver {type(message)}:\n{message.summary()}")
             if type(message) is SIPResponse:
                 if message.status is ResponseCode.OK:
                     if self.state in [
@@ -108,15 +109,34 @@ class VoIPCall:
                         CallState.PROGRESS,
                     ]:
                         self.answered(message)
-                elif message.status == ResponseCode.NOT_FOUND:
-                    pass
-                elif message.status == ResponseCode.INTERNAL_SERVER_ERROR:
-                    debug(f"Received Internal-Server-Error Message: {message}")
-                    pass
+                elif message.status == ResponseCode.RINGING:
+                    self.ringing(message)
+                elif message.status == ResponseCode.SESSION_PROGRESS:
+                    self.progress(message)
+                elif message.status == ResponseCode.BAD_REQUEST:
+                    self.bad_request(message)
                 elif message.status == ResponseCode.FORBIDDEN:
                     self.denied(message)
-                    debug(f"Received Forbidden Message: {message}")
-                    pass
+                elif message.status == ResponseCode.NOT_FOUND:
+                    self.not_found(message)
+                elif message.status == ResponseCode.REQUEST_TIMEOUT:
+                    self.request_timeout(message)
+                elif message.status == ResponseCode.TEMPORARILY_UNAVAILABLE:
+                    self.unavailable(message)
+                elif message.status == ResponseCode.BUSY_HERE:
+                    self.busy(message)
+                elif message.status == ResponseCode.REQUEST_TERMINATED:
+                    self.request_terminated(message)
+                elif message.status == ResponseCode.INTERNAL_SERVER_ERROR:
+                    self.server_error(message)
+                elif message.status == ResponseCode.SERVICE_UNAVAILABLE:
+                    self.service_unavailable(message)
+                elif message.status == ResponseCode.BUSY_EVERYWHERE:
+                    self.busy(message)
+                elif message.status == ResponseCode.DECLINE:
+                    self.decline(message)
+                elif message.status == ResponseCode.DOES_NOT_EXIST_ANYWHERE:
+                    self.not_found(message)
             else:
                 if message.method == SIPMethod.BYE:
                     self.bye(message)
@@ -451,6 +471,7 @@ class VoIPCall:
     def denied(self, request: SIPMessage) -> None:
         #ack = self.phone.sip.gen_ack(request)
         #self.conn.send(ack)
+        self.error_code = 403
         self.state = CallState.DENIED
         return
 
@@ -472,6 +493,7 @@ class VoIPCall:
 
         for x in self.RTPClients:
             x.stop()
+        self.error_code = 404
         self.state = CallState.ENDED
         del self.phone.calls[self.request.headers["Call-ID"]]
         debug("Call not found and terminated")
@@ -497,6 +519,7 @@ class VoIPCall:
 
         for x in self.RTPClients:
             x.stop()
+        self.error_code = 480
         self.state = CallState.ENDED
         del self.phone.calls[self.request.headers["Call-ID"]]
         debug("Call unavailable and terminated")
@@ -510,14 +533,117 @@ class VoIPCall:
         # also resets all other warnings.
         warnings.simplefilter("default")
 
+    def bad_request(self, request: SIPMessage) -> None:
+        if self.state != CallState.DIALING:
+            debug(
+                f"Received bad_request response for a call not in dialing state. "
+                + f"Call: {self.call_id}, Call State: {self.state}"
+            )
+            return
+        for x in self.RTPClients:
+            x.stop()
+        self.error_code = 400
+        self.state = CallState.ENDED
+        if self.request.headers["Call-ID"] in self.phone.calls:
+            del self.phone.calls[self.request.headers["Call-ID"]]
+        debug(f"Call ended due to bad request (400): {request.summary()}")
+
+    def request_timeout(self, request: SIPMessage) -> None:
+        if self.state not in [CallState.DIALING, CallState.RINGING, CallState.PROGRESS]:
+            debug(
+                f"Received request_timeout response for a call not in expected state. "
+                + f"Call: {self.call_id}, Call State: {self.state}"
+            )
+            return
+        for x in self.RTPClients:
+            x.stop()
+        self.error_code = 408
+        self.state = CallState.ENDED
+        if self.request.headers["Call-ID"] in self.phone.calls:
+            del self.phone.calls[self.request.headers["Call-ID"]]
+        debug(f"Call ended due to request timeout (408): {request.summary()}")
+
+    def request_terminated(self, request: SIPMessage) -> None:
+        if self.state not in [CallState.DIALING, CallState.RINGING, CallState.PROGRESS, CallState.CANCELING]:
+            debug(
+                f"Received request_terminated response for a call not in expected state. "
+                + f"Call: {self.call_id}, Call State: {self.state}"
+            )
+            return
+        for x in self.RTPClients:
+            x.stop()
+        self.error_code = 487
+        self.state = CallState.ENDED
+        if self.request.headers["Call-ID"] in self.phone.calls:
+            del self.phone.calls[self.request.headers["Call-ID"]]
+        debug(f"Call terminated (487): {request.summary()}")
+
+    def server_error(self, request: SIPMessage) -> None:
+        if self.state not in [CallState.DIALING, CallState.RINGING, CallState.PROGRESS]:
+            debug(
+                f"Received server_error response for a call not in expected state. "
+                + f"Call: {self.call_id}, Call State: {self.state}"
+            )
+            return
+        for x in self.RTPClients:
+            x.stop()
+        self.error_code = 500
+        self.state = CallState.ENDED
+        if self.request.headers["Call-ID"] in self.phone.calls:
+            del self.phone.calls[self.request.headers["Call-ID"]]
+        debug(f"Call ended due to server error (500): {request.summary()}")
+
+    def service_unavailable(self, request: SIPMessage) -> None:
+        if self.state not in [CallState.DIALING, CallState.RINGING, CallState.PROGRESS]:
+            debug(
+                f"Received service_unavailable response for a call not in expected state. "
+                + f"Call: {self.call_id}, Call State: {self.state}"
+            )
+            return
+        for x in self.RTPClients:
+            x.stop()
+        self.error_code = 503
+        self.state = CallState.ENDED
+        if self.request.headers["Call-ID"] in self.phone.calls:
+            del self.phone.calls[self.request.headers["Call-ID"]]
+        debug(f"Call ended due to service unavailable (503): {request.summary()}")
+
+    def decline(self, request: SIPMessage) -> None:
+        if self.state not in [CallState.DIALING, CallState.RINGING, CallState.PROGRESS]:
+            debug(
+                f"Received decline response for a call not in expected state. "
+                + f"Call: {self.call_id}, Call State: {self.state}"
+            )
+            return
+        for x in self.RTPClients:
+            x.stop()
+        self.error_code = 603
+        self.state = CallState.ENDED
+        if self.request.headers["Call-ID"] in self.phone.calls:
+            del self.phone.calls[self.request.headers["Call-ID"]]
+        debug(f"Call declined (603): {request.summary()}")
+
     def ringing(self, request: SIPMessage) -> None:
         if self.state == CallState.RINGING:
             self.deny()
-        else:
+        elif self.state == CallState.DIALING:
+            self.state = CallState.RINGING
             self.request = request
 
     def busy(self, request: SIPMessage) -> None:
-        self.bye(request)
+        if self.state in [CallState.DIALING, CallState.RINGING, CallState.PROGRESS]:
+            for x in self.RTPClients:
+                x.stop()
+            if type(request) is SIPResponse and hasattr(request, 'status'):
+                self.error_code = int(request.status)
+            else:
+                self.error_code = 486
+            self.state = CallState.ENDED
+            if self.request.headers["Call-ID"] in self.phone.calls:
+                del self.phone.calls[self.request.headers["Call-ID"]]
+            debug(f"Call busy: {request.summary()}")
+        else:
+            self.bye(request)
 
     def deny(self) -> None:
         if self.state != CallState.RINGING:
