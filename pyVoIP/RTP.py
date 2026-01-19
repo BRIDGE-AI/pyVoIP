@@ -156,11 +156,20 @@ class PayloadType(Enum):
 
 class RTPPacketManager:
     def __init__(self):
-        self.offset = 4294967296
-        """
-        The largest number storable in 4 bytes + 1. This will ensure the
-        offset adjustment in self.write(offset, data) works.
-        """
+        # offset 초기값 설명:
+        # - 첫 RTP 패킷 수신 시 write()에서 'if offset < self.offset' 조건으로
+        #   rebuild()가 호출되어 버퍼가 초기화되어야 함
+        # - RTP 타임스탬프는 랜덤 시작값을 가지며 최대 2^32-1 (RFC 3550)
+        #
+        # 문제 (16비트 오디오):
+        # - 16비트 변환 시 버퍼 위치 계산을 위해 timestamp * 2 사용
+        # - 기존 초기값 2^32에서 타임스탬프가 2^31 이상이면 (약 50% 확률)
+        #   timestamp * 2 >= 2^32가 되어 조건 불만족
+        # - rebuild() 미호출 → 버퍼 초기화 실패 → 오디오 수신 불가
+        # - 증상: 통화 연결 직후부터 away 오디오가 전혀 들리지 않음 (간헐적)
+        #
+        # 해결: 초기값을 2^33으로 변경하여 timestamp * 2 최대값(2^33-2)보다 크게 설정
+        self.offset = 8589934592
         self.buffer = io.BytesIO()
         self.bufferLock = threading.Lock()
         self.log = {}
