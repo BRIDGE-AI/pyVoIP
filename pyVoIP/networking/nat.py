@@ -2,9 +2,6 @@ from enum import Enum
 from typing import Optional
 import ipaddress
 import socket
-import pyVoIP
-
-debug = pyVoIP.debug
 
 
 class NATError(Exception):

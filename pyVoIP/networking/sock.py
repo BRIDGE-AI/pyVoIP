@@ -306,21 +306,15 @@ class VoIPSocket(threading.Thread):
     ) -> Optional[VoIPConnection]:
         local_tag, remote_tag = self.determine_tags(message)
         call_id = message.headers["Call-ID"]
-        msg_type = message.start_line[0].split(" ")[0]
-        debug(f"__get_connection: {msg_type} call_id={call_id[:20]}..., local_tag={local_tag}, remote_tag={remote_tag}")
         conn = self.buffer.cursor()
         sql = 'SELECT "connection" FROM "listening" WHERE "call_id" IS ?'
         sql += ' AND "local_tag" IS ? AND "remote_tag" IS ?'
         result = conn.execute(sql, (call_id, local_tag, remote_tag))
         rows = result.fetchall()
         if rows:
-            debug(f"__get_connection: exact match found, conn_id={rows[0][0]}")
             conn.close()
             return self.conns.get(rows[0][0], None)
         debug("New Connection Started")
-        result = conn.execute('SELECT * FROM "listening"')
-        all_rows = result.fetchall()
-        debug(f"__get_connection: listening table dump: {all_rows}")
         # If we didn't find one lets look for something that doesn't have
         # one of the tags
         sql = 'SELECT "connection" FROM "listening" WHERE "call_id" = ?'
@@ -329,16 +323,11 @@ class VoIPSocket(threading.Thread):
         result = conn.execute(sql, (call_id, local_tag, remote_tag))
         rows = result.fetchall()
         if rows:
-            debug(f"__get_connection: NULL-tolerant match found, conn_id={rows[0][0]}")
             if local_tag and remote_tag:
                 sql = 'UPDATE "listening" SET "remote_tag" = ?, '
                 sql += '"local_tag" = ? WHERE "connection" = ?'
                 conn.execute(sql, (remote_tag, local_tag, rows[0][0]))
                 self.conns.get(rows[0][0], None).update_tags(local_tag, remote_tag)
-                debug(f"__get_connection: updated tags for conn_id={rows[0][0]}")
-                result = conn.execute('SELECT * FROM "listening" WHERE "connection" = ?', (rows[0][0],))
-                updated_row = result.fetchone()
-                debug(f"__get_connection: after update: {updated_row}")
             conn.close()
             return self.conns.get(rows[0][0], None)
         debug("No Connection in sqlite buffer")
