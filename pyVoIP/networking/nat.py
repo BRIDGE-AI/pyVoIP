@@ -60,11 +60,15 @@ class NAT:
             ip = ipaddress.ip_address(host)
             if ip == self.bind_ip:
                 return AddressType.LOCAL
+            if self.bind_ip == ipaddress.ip_address("0.0.0.0") and ip in self.network:
+                return AddressType.LOCAL
             return AddressType.REMOTE
         except ValueError:
             try:
                 ip = ipaddress.ip_address(socket.gethostbyname(host))
                 if ip == self.bind_ip:
+                    return AddressType.LOCAL
+                if self.bind_ip == ipaddress.ip_address("0.0.0.0") and ip in self.network:
                     return AddressType.LOCAL
                 return AddressType.REMOTE
             except socket.gaierror:
