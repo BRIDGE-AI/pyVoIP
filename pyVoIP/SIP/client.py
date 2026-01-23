@@ -92,7 +92,36 @@ class SIPClient:
         self.default_expires = 120
         self.register_timeout = 30
 
+        # ============================================================================
+        # SIP 등록 및 NAT Keep-alive 관련 변수
+        # ============================================================================
+        #
+        # [NAT 환경에서의 문제]
+        # NAT 라우터는 내부IP:포트 ↔ 외부IP:포트 매핑 테이블을 유지하는데,
+        # UDP는 연결 상태가 없어서 일정 시간(보통 2~5분) 패킷이 없으면 매핑이 삭제됨.
+        # 매핑이 삭제되면 외부에서 들어오는 인바운드 콜을 수신할 수 없게 됨.
+        #
+        # [해결 방법: REGISTER와 OPTIONS 분리]
+        # - REGISTER: SIP 서버에 등록 상태 유지 (server_expires 기준, 보통 30분~1시간)
+        # - OPTIONS: NAT 바인딩 유지 (keepalive_interval 기준, 115초)
+        # OPTIONS는 인증 불필요하고 가벼워서 keep-alive 용도로 적합함.
+        #
+        # [프로토콜 흐름]
+        # 1. 초기 REGISTER: default_expires(120초)로 요청 → 서버가 server_expires(예:3600초) 부여
+        # 2. 이후 REGISTER: server_expires의 50% 주기로 재등록 (예: 30분마다)
+        # 3. NAT keep-alive: keepalive_interval(115초) 경과 시 OPTIONS 전송
+        #    - 단, last_packet_time 기준으로 다른 패킷이 있었으면 OPTIONS 생략
+        #
+        # [타이머 동작]
+        # - registerThread: server_expires * 0.5 후 REGISTER 재전송
+        # - keepaliveThread: 115초마다 last_packet_time 확인 → 필요시 OPTIONS 전송
+        # ============================================================================
+        self.server_expires: Optional[int] = None  # 서버가 부여한 REGISTER 만료 시간 (초)
+        self.keepalive_interval = 115  # NAT 바인딩 유지를 위한 OPTIONS 전송 주기 (초)
+        self.last_packet_time: float = 0  # 마지막 패킷 송신 시간 (keep-alive 판단용)
+
         self.inviteCounter = Counter()
+        self.optionsCounter = Counter()  # OPTIONS 요청 CSeq 카운터
         self.registerCounter = Counter()
         self.subscribeCounter = Counter()
         self.byeCounter = Counter()
@@ -104,7 +133,8 @@ class SIPClient:
         self.urnUUID = self.gen_urn_uuid()
         self.nc: Dict[str, Counter] = {}
 
-        self.registerThread: Optional[Timer] = None
+        self.registerThread: Optional[Timer] = None  # REGISTER 재전송 타이머
+        self.keepaliveThread: Optional[Timer] = None  # NAT keep-alive 타이머 (OPTIONS 전송용)
         self.register_failures = 0
 
     def recv(self) -> None:
@@ -233,6 +263,7 @@ class SIPClient:
         self.s.start()
         # TODO: Check if we need to register with a server or proxy.
         self.register()
+        self.__start_keepalive_timer()
         """
         t = Timer(1, self.recv)
         t.name = "SIP Receive"
@@ -241,6 +272,8 @@ class SIPClient:
 
     def stop(self) -> None:
         self.NSD = False
+        if self.keepaliveThread:
+            self.keepaliveThread.cancel()
         if self.registerThread:
             # Only run if registerThread exists
             self.registerThread.cancel()
@@ -252,9 +285,11 @@ class SIPClient:
     def sendto(self, request: str, address=None) -> "VoIPConnection":
         if address is None:
             address = (self.server, self.port)
+        self.last_packet_time = time.time()
         return self.s.send(request.encode("utf8"))
 
     def send(self, request: str) -> "VoIPConnection":
+        self.last_packet_time = time.time()
         return self.s.send(request.encode("utf8"))
 
     def __gen_from_to_via_request(
@@ -589,6 +624,30 @@ class SIPClient:
         regRequest += "\r\n\r\n"
 
         return regRequest
+
+    def gen_options(self) -> str:
+        optRequest = f"OPTIONS sip:{self.server}:{self.port} SIP/2.0\r\n"
+        optRequest += self.__gen_via(self.server, self.gen_branch())
+        tag = self.gen_tag()
+        method = "sips" if self.transport_mode is TransportMode.TLS else "sip"
+        optRequest += self.__gen_from_to(
+            "From",
+            self.user,
+            self.server,
+            method=method,
+            port=self.port,
+            header_parms=f";tag={tag}",
+        )
+        optRequest += self.__gen_from_to(
+            "To", self.user, self.server, method=method, port=self.port
+        )
+        optRequest += f"Call-ID: {self.gen_call_id()}\r\n"
+        optRequest += f"CSeq: {self.optionsCounter.next()} OPTIONS\r\n"
+        optRequest += "Max-Forwards: 70\r\n"
+        optRequest += self.__gen_user_agent()
+        optRequest += "Content-Length: 0"
+        optRequest += "\r\n\r\n"
+        return optRequest
 
     def gen_subscribe(self, response: SIPMessage) -> str:
         subRequest = f"SUBSCRIBE sip:{self.user}@{self.server} SIP/2.0\r\n"
@@ -1371,14 +1430,53 @@ class SIPClient:
 
     def __start_register_timer(self, delay: Optional[int] = None):
         if delay is None:
-            delay = self.default_expires - 5
+            if self.server_expires:
+                delay = int(self.server_expires * 0.5)
+            else:
+                delay = self.default_expires - 5
         if self.NSD:
-            debug("New register thread")
+            debug(f"New register thread (delay={delay}s)")
             self.registerThread = Timer(delay, self.register)
             self.registerThread.name = (
                 "SIP Register CSeq: " + f"{self.registerCounter.x}"
             )
             self.registerThread.start()
+
+    def __start_keepalive_timer(self, delay: Optional[float] = None):
+        if self.keepaliveThread:
+            self.keepaliveThread.cancel()
+        if delay is None:
+            delay = self.keepalive_interval
+        if self.NSD:
+            self.keepaliveThread = Timer(delay, self.__keepalive_check)
+            self.keepaliveThread.name = "SIP Keepalive"
+            self.keepaliveThread.daemon = True
+            self.keepaliveThread.start()
+
+    def __keepalive_check(self):
+        if not self.NSD:
+            return
+        elapsed = time.time() - self.last_packet_time
+        if elapsed >= self.keepalive_interval:
+            self.__send_options_keepalive()
+            self.__start_keepalive_timer()
+        else:
+            # 남은 시간만큼 keep-alive 타이머 재시작 (115초 초과 방지)
+            remaining = self.keepalive_interval - elapsed
+            self.__start_keepalive_timer(delay=remaining)
+
+    def __send_options_keepalive(self):
+        conn = None
+        try:
+            options_request = self.gen_options()
+            conn = self.send(options_request)
+            conn.recv(1024, timeout=5)
+            debug("OPTIONS keepalive sent")
+        except Exception as e:
+            debug(f"OPTIONS keepalive failed: {e}")
+        finally:
+            if conn:
+                conn.close()
 
     def __register(self) -> bool:
         self.phone._status = PhoneStatus.REGISTERING
@@ -1416,6 +1514,11 @@ class SIPClient:
             raise RetryRequiredError("Received a 500 error when registering.")
 
         elif response.status == ResponseCode.OK:
+            if "Expires" in response.headers:
+                try:
+                    self.server_expires = int(response.headers["Expires"])
+                except (ValueError, TypeError):
+                    pass
             return True
 
         elif response.status == ResponseCode(401) or response.status == ResponseCode(407):
