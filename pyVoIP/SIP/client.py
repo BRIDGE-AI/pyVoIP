@@ -804,15 +804,16 @@ class SIPClient:
         ms: Dict[int, Dict[int, "RTP.PayloadType"]],
         sendtype: "RTP.TransmitType",
     ) -> str:
+        callback_ip = self.nat.remote_hostname or self.bind_ip
         # Generate body first for content length
         body = "v=0\r\n"
         # TODO: Check IPv4/IPv6
         body += (
-            f"o=pyVoIP {sess_id} {int(sess_id) + 2} IN IP4 {self.bind_ip}\r\n"
+            f"o=pyVoIP {sess_id} {int(sess_id) + 2} IN IP4 {callback_ip}\r\n"
         )
         body += f"s=pyVoIP {pyVoIP.__version__}\r\n"
         # TODO: Check IPv4/IPv6
-        body += f"c=IN IP4 {self.bind_ip}\r\n"
+        body += f"c=IN IP4 {callback_ip}\r\n"
         body += "t=0 0\r\n"
         for x in ms:
             # TODO: Check AVP mode from request
