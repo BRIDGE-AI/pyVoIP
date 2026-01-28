@@ -842,9 +842,10 @@ class SIPClient:
             + f"{request.headers['CSeq']['method']}\r\n"
         )
         method = "sips" if self.transport_mode is TransportMode.TLS else "sip"
+        contact_user = self.user or request.headers['To']['user']
         regRequest += self.__gen_contact(
             method,
-            self.user,
+            contact_user,
             self.nat.get_host(self.server),
             port=self.bind_port,
         )
@@ -865,8 +866,10 @@ class SIPClient:
         sendtype: "RTP.TransmitType",
         branch: str,
         call_id: str,
-        callback_ip: Optional[str] = None
+        callback_ip: Optional[str] = None,
+        caller_id: Optional[str] = None
     ) -> str:
+        caller_id = caller_id or self.user
         callback_ip = callback_ip or self.nat.remote_hostname or self.bind_ip
         debug(f"callback_ip:{callback_ip}")
 
@@ -910,7 +913,7 @@ class SIPClient:
         method = "sips" if self.transport_mode is TransportMode.TLS else "sip"
         invRequest += self.__gen_contact(
             method,
-            self.user,
+            caller_id,
             self.nat.get_host(self.server),
             port=self.bind_port,
         )
@@ -919,7 +922,7 @@ class SIPClient:
         )
         invRequest += self.__gen_from_to(
             "From",
-            self.user,
+            caller_id,
             self.nat.get_host(self.server),
             port=self.bind_port,
             header_parms=f";tag={tag}",
@@ -1174,12 +1177,13 @@ class SIPClient:
         ms: Dict[int, Dict[int, "RTP.PayloadType"]],
         sendtype: "RTP.TransmitType",
         callback_ip: Optional[str] = "0.0.0.0",
+        caller_id: Optional[str] = None,
     ) -> Tuple[SIPMessage, str, int, "VoIPConnection"]:
         branch = "z9hG4bK" + self.gen_call_id()[0:25]
         call_id = self.gen_call_id()
         sess_id = self.sessID.next()
         invite = self.gen_invite(
-            number, str(sess_id), ms, sendtype, branch, call_id, callback_ip
+            number, str(sess_id), ms, sendtype, branch, call_id, callback_ip, caller_id
         )
         conn = self.sendto(invite)
         debug("Invited")
@@ -1217,7 +1221,7 @@ class SIPClient:
         auth = self.gen_authorization(response)
 
         invite = self.gen_invite(
-            number, str(sess_id), ms, sendtype, branch, call_id, callback_ip
+            number, str(sess_id), ms, sendtype, branch, call_id, callback_ip, caller_id
         )
         invite = invite.replace(
             "\r\nContent-Length", f"\r\n{auth}Content-Length"

@@ -411,7 +411,8 @@ class VoIPPhone:
         self,
         number: str,
         payload_types: Optional[List[RTP.PayloadType]] = None,
-        callback_ip: Optional[str] = None
+        callback_ip: Optional[str] = None,
+        caller_id: Optional[str] = None
     ) -> VoIPCall:
         callback_ip = callback_ip or self.callback_ip
 
@@ -434,7 +435,7 @@ class VoIPPhone:
                 dynamic_int += 1
         debug(f"Making call with {medias=}")
         request, call_id, sess_id, conn = self.sip.invite(
-            number, medias, RTP.TransmitType.SENDRECV, callback_ip
+            number, medias, RTP.TransmitType.SENDRECV, callback_ip, caller_id
         )
         self.calls[call_id] = self.call_class(
             self,
