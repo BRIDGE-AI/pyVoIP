@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING, List, Optional, Tuple, Union
 from pyVoIP.types import KEY_PASSWORD, SOCKETS
-from pyVoIP.SIP.message.message import SIPMessage, SIPRequest
+from pyVoIP.SIP.message.message import SIPMessage, SIPMethod, SIPRequest
 from pyVoIP.SIP.error import SIPParseError
 from pyVoIP.networking.nat import NAT, AddressType
 from pyVoIP.networking.transport import TransportMode
@@ -496,6 +496,12 @@ class VoIPSocket(threading.Thread):
 
         conn_created = False
         voip_conn = self.__get_connection(message)
+
+        if voip_conn is None and type(message) is SIPRequest and message.method == SIPMethod.BYE:
+            ok = self.sip.gen_ok(message)
+            self.sip.sendto(ok, message.headers["Via"][0]["address"])
+            return
+
         if voip_conn is None:
             voip_conn = VoIPConnection(self, conn, message)
             conn_created = True
