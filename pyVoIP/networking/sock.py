@@ -400,6 +400,9 @@ class VoIPSocket(threading.Thread):
             conn.execute(
                 'DELETE FROM "listening" WHERE "connection" = ?', (conn_id,)
             )
+            conn.execute(
+                'DELETE FROM "msgs" WHERE "call_id" = ?', (connection.call_id,)
+            )
         except sqlite3.OperationalError:
             pass
         finally:

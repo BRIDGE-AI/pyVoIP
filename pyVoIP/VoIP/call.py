@@ -499,6 +499,7 @@ class VoIPCall:
         self.error_code = 404
         self.error_response = request
         self.state = CallState.ENDED
+        self.conn.close()
         del self.phone.calls[self.request.headers["Call-ID"]]
         debug("Call not found and terminated")
         warnings.warn(
@@ -526,6 +527,7 @@ class VoIPCall:
         self.error_code = 480
         self.error_response = request
         self.state = CallState.ENDED
+        self.conn.close()
         del self.phone.calls[self.request.headers["Call-ID"]]
         debug("Call unavailable and terminated")
         warnings.warn(
@@ -550,6 +552,7 @@ class VoIPCall:
         self.error_code = 400
         self.error_response = request
         self.state = CallState.ENDED
+        self.conn.close()
         if self.request.headers["Call-ID"] in self.phone.calls:
             del self.phone.calls[self.request.headers["Call-ID"]]
         debug(f"Call ended due to bad request (400): {request.summary()}")
@@ -566,6 +569,7 @@ class VoIPCall:
         self.error_code = 408
         self.error_response = request
         self.state = CallState.ENDED
+        self.conn.close()
         if self.request.headers["Call-ID"] in self.phone.calls:
             del self.phone.calls[self.request.headers["Call-ID"]]
         debug(f"Call ended due to request timeout (408): {request.summary()}")
@@ -582,6 +586,7 @@ class VoIPCall:
         self.error_code = 487
         self.error_response = request
         self.state = CallState.ENDED
+        self.conn.close()
         if self.request.headers["Call-ID"] in self.phone.calls:
             del self.phone.calls[self.request.headers["Call-ID"]]
         debug(f"Call terminated (487): {request.summary()}")
@@ -598,6 +603,7 @@ class VoIPCall:
         self.error_code = 500
         self.error_response = request
         self.state = CallState.ENDED
+        self.conn.close()
         if self.request.headers["Call-ID"] in self.phone.calls:
             del self.phone.calls[self.request.headers["Call-ID"]]
         debug(f"Call ended due to server error (500): {request.summary()}")
@@ -614,6 +620,7 @@ class VoIPCall:
         self.error_code = 503
         self.error_response = request
         self.state = CallState.ENDED
+        self.conn.close()
         if self.request.headers["Call-ID"] in self.phone.calls:
             del self.phone.calls[self.request.headers["Call-ID"]]
         debug(f"Call ended due to service unavailable (503): {request.summary()}")
@@ -630,6 +637,7 @@ class VoIPCall:
         self.error_code = 603
         self.error_response = request
         self.state = CallState.ENDED
+        self.conn.close()
         if self.request.headers["Call-ID"] in self.phone.calls:
             del self.phone.calls[self.request.headers["Call-ID"]]
         debug(f"Call declined (603): {request.summary()}")
@@ -651,6 +659,7 @@ class VoIPCall:
                 self.error_code = 486
             self.error_response = request
             self.state = CallState.ENDED
+            self.conn.close()
             if self.request.headers["Call-ID"] in self.phone.calls:
                 del self.phone.calls[self.request.headers["Call-ID"]]
             debug(f"Call busy: {request.summary()}")
@@ -665,6 +674,7 @@ class VoIPCall:
         for x in self.RTPClients:
             x.stop()
         self.state = CallState.ENDED
+        self.conn.close()
         del self.phone.calls[self.request.headers["Call-ID"]]
 
     def hangup(self) -> None:
@@ -675,6 +685,7 @@ class VoIPCall:
             x.stop()
         self.sip.bye(self.request)
         self.state = CallState.ENDED
+        self.conn.close()
         if self.request.headers["Call-ID"] in self.phone.calls:
             del self.phone.calls[self.request.headers["Call-ID"]]
 
@@ -700,6 +711,7 @@ class VoIPCall:
         self.state = CallState.ENDED
         ok = self.phone.sip.gen_ok(request)
         self.conn.send(ok)
+        self.conn.close()
         if self.request.headers["Call-ID"] in self.phone.calls:
             del self.phone.calls[self.request.headers["Call-ID"]]
 
