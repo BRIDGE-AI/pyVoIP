@@ -762,8 +762,9 @@ class SIPClient:
         okResponse = "SIP/2.0 200 OK\r\n"
         okResponse += self._gen_response_via_header(request)
         okResponse += f"From: {request.headers['From']['raw']}\r\n"
+        to_tag = request.headers["To"].get("tag") or self.gen_tag()
         okResponse += self.__gen_from_to_via_request(
-            request, "To", self.gen_tag()
+            request, "To", to_tag
         )
         okResponse += f"Call-ID: {request.headers['Call-ID']}\r\n"
         okResponse += (
