@@ -514,8 +514,10 @@ class VoIPSocket(threading.Thread):
 
             cnd = self.sip.phone.ignorable(message)
             if cnd is not None:
-                debug(f"ignored by condition:{cnd}")
-                # 메세지를 sqlite에 넣기 전에 커트하도록 수정했기 때문에 명시적으로 delete_msg()하지 않음
+                method = message.method if hasattr(message, 'method') else 'UNKNOWN'
+                via = message.headers.get("Via", [{}])[0].get("address", ("?", "?"))
+                ua = message.headers.get("User-Agent", "?")
+                print(f"\033[93m[BLOCKED] {method} from {via[0]}:{via[1]} (UA: {ua}) - condition: {cnd}\033[0m")
                 return
 
         # 조건에 맞아 ignore한다면 register하지 않음

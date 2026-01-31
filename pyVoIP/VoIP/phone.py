@@ -199,6 +199,14 @@ class VoIPPhone:
                     if request.headers["To"]["user"] not in val:
                         hit += 1
                     continue
+
+                if key == "#not-kct-sbc":
+                    via_host = request.headers["Via"][0]["address"][0]
+                    ua = request.headers.get("User-Agent", "")
+                    is_kct = via_host.startswith("27.255.98.") and "KCT" in ua
+                    if not is_kct:
+                        hit += 1
+                    continue
                 # adds custom cases below
 
                 continue
