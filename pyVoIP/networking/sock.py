@@ -499,7 +499,8 @@ class VoIPSocket(threading.Thread):
 
         if voip_conn is None and type(message) is SIPRequest and message.method in (SIPMethod.BYE, SIPMethod.OPTIONS):
             ok = self.sip.gen_ok(message)
-            self.sip.sendto(ok, message.headers["Via"][0]["address"])
+            addr = message.headers["Via"][0]["address"]
+            self.s.sendto(ok.encode("utf8"), addr)
             return
 
         if voip_conn is None:
