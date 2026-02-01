@@ -14,7 +14,7 @@ from pyVoIP.VoIP.error import (
 )
 from pyVoIP.VoIP.status import PhoneStatus
 from threading import Timer, Lock
-from typing import Dict, List, Optional, Type
+from typing import Dict, List, Optional, Tuple, Type
 from dataclasses import dataclass
 import pyVoIP
 import random
@@ -48,6 +48,7 @@ class VoIPPhoneParameter:
     sip_class: Type[SIPClient] = None
     callback_ip: Optional[str] = None
     ignores: Optional[List[Dict]] = None
+    heartbeat_servers: Optional[List[Tuple[str, int]]] = None
 
 
 class VoIPPhone:
@@ -102,6 +103,7 @@ class VoIPPhone:
             call_callback=self.callback,
             fatal_callback=self.fatal,
             transport_mode=self.voip_phone_parameter.transport_mode,
+            heartbeat_servers=self.voip_phone_parameter.heartbeat_servers,
         )
         self.callback_ip = self.voip_phone_parameter.callback_ip
 

@@ -68,6 +68,7 @@ class SIPClient:
         cert_file: Optional[str] = None,
         key_file: Optional[str] = None,
         key_password: KEY_PASSWORD = None,
+        heartbeat_servers: Optional[List[Tuple[str, int]]] = None,
     ):
         self.NSD = False
         self.server = server
@@ -136,6 +137,9 @@ class SIPClient:
         self.registerThread: Optional[Timer] = None  # REGISTER 재전송 타이머
         self.keepaliveThread: Optional[Timer] = None  # NAT keep-alive 타이머 (OPTIONS 전송용)
         self.register_failures = 0
+        servers = set(heartbeat_servers or [])
+        servers.add((server, port))
+        self.heartbeat_servers = list(servers)
 
     def recv(self) -> None:
         while self.NSD:
@@ -263,6 +267,7 @@ class SIPClient:
         self.s.start()
         # TODO: Check if we need to register with a server or proxy.
         self.register()
+        self.__send_options_keepalive()
         self.__start_keepalive_timer()
         """
         t = Timer(1, self.recv)
@@ -625,21 +630,23 @@ class SIPClient:
 
         return regRequest
 
-    def gen_options(self) -> str:
-        optRequest = f"OPTIONS sip:{self.server}:{self.port} SIP/2.0\r\n"
-        optRequest += self.__gen_via(self.server, self.gen_branch())
+    def gen_options(self, server: Optional[str] = None, port: Optional[int] = None) -> str:
+        server = server or self.server
+        port = port or self.port
+        optRequest = f"OPTIONS sip:{server}:{port} SIP/2.0\r\n"
+        optRequest += self.__gen_via(server, self.gen_branch())
         tag = self.gen_tag()
         method = "sips" if self.transport_mode is TransportMode.TLS else "sip"
         optRequest += self.__gen_from_to(
             "From",
             self.user,
-            self.server,
+            server,
             method=method,
-            port=self.port,
+            port=port,
             header_parms=f";tag={tag}",
         )
         optRequest += self.__gen_from_to(
-            "To", self.user, self.server, method=method, port=self.port
+            "To", self.user, server, method=method, port=port
         )
         optRequest += f"Call-ID: {self.gen_call_id()}\r\n"
         optRequest += f"CSeq: {self.optionsCounter.next()} OPTIONS\r\n"
@@ -1472,17 +1479,18 @@ class SIPClient:
             self.__start_keepalive_timer(delay=remaining)
 
     def __send_options_keepalive(self):
-        conn = None
-        try:
-            options_request = self.gen_options()
-            conn = self.send(options_request)
-            conn.recv(1024, timeout=5)
-            debug("OPTIONS keepalive sent")
-        except Exception as e:
-            debug(f"OPTIONS keepalive failed: {e}")
-        finally:
-            if conn:
-                conn.close()
+        for server, port in self.heartbeat_servers:
+            conn = None
+            try:
+                options_request = self.gen_options(server, port)
+                conn = self.send(options_request)
+                conn.recv(1024, timeout=5)
+                debug(f"OPTIONS keepalive sent to {server}:{port}")
+            except Exception as e:
+                debug(f"OPTIONS keepalive failed to {server}:{port}: {e}")
+            finally:
+                if conn:
+                    conn.close()
 
     def __register(self) -> bool:
         self.phone._status = PhoneStatus.REGISTERING
