@@ -388,9 +388,13 @@ class VoIPPhone:
 
     def start(self) -> None:
         self._status = PhoneStatus.REGISTERING
+        # sip.start() 안에서 heartbeat OPTIONS 응답 대기(최대 5초)하는 동안 INVITE가 먼저 도착할 수 있음.
+        # 그때 생성되는 Call의 receiver 스레드가 while ... and self.phone.NSD 루프를 돌기 때문에,
+        # NSD가 False이면 receiver가 즉시 종료되어 이후 BYE를 처리하지 못함.
+        # 따라서 sip.start() 호출 전에 NSD=True를 먼저 설정해야 함.
+        self.NSD = True
         try:
             self.sip.start()
-            self.NSD = True
         except Exception as error:
             debug(f"PHONE START ERROR: {error}")
             self._status = PhoneStatus.FAILED

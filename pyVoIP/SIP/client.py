@@ -945,6 +945,74 @@ class SIPClient:
 
         return invRequest
 
+    def gen_reinvite(
+        self,
+        request: SIPMessage,
+        sess_id: str,
+        ms: Dict[int, Dict[int, "RTP.PayloadType"]],
+        sendtype: "RTP.TransmitType",
+        remote_ip: str,
+        remote_port: int,
+    ) -> str:
+        call_id = request.headers["Call-ID"]
+        tag = self.tagLibrary[call_id]
+
+        body = "v=0\r\n"
+        body += (
+            f"o=pyVoIP {sess_id} {int(sess_id) + 2} IN IP"
+            + f"{self.nat.bind_ip.version} {self.bind_ip}\r\n"
+        )
+        body += f"s=pyVoIP {pyVoIP.__version__}\r\n"
+        body += f"c=IN IP{self.nat.bind_ip.version} {remote_ip}\r\n"
+        body += "t=0 0\r\n"
+        for x in ms:
+            body += f"m=audio {remote_port} RTP/AVP"
+            for m in ms[x]:
+                body += f" {m}"
+        body += "\r\n"
+        for x in ms:
+            for m in ms[x]:
+                body += f"a=rtpmap:{m} {ms[x][m]}/{ms[x][m].rate}\r\n"
+                if str(ms[x][m]) == "telephone-event":
+                    body += f"a=fmtp:{m} 0-15\r\n"
+        body += "a=ptime:20\r\n"
+        body += "a=maxptime:150\r\n"
+        body += f"a={sendtype}\r\n"
+
+        c = request.headers["Contact"]["uri"]
+        reinvite = f"INVITE {c} SIP/2.0\r\n"
+        branch = self.gen_branch()
+        reinvite += self.__gen_via(self.server, branch)
+        reinvite += "Max-Forwards: 70\r\n"
+
+        _from = request.headers["From"]
+        to = request.headers["To"]
+        if _from["tag"] == tag:
+            reinvite += self.__gen_from_to_via_request(request, "From", tag)
+            reinvite += f"To: {to['raw']}\r\n"
+        else:
+            reinvite += f"To: {_from['raw']}\r\n"
+            reinvite += self.__gen_from_to_via_request(
+                request, "To", tag, dsthdr="From"
+            )
+
+        reinvite += f"Call-ID: {call_id}\r\n"
+        reinvite += f"CSeq: {self.inviteCounter.next()} INVITE\r\n"
+        method = "sips" if self.transport_mode is TransportMode.TLS else "sip"
+        reinvite += self.__gen_contact(
+            method,
+            self.user,
+            self.nat.get_host(self.server),
+            port=self.bind_port,
+        )
+        reinvite += f"Allow: {(', '.join(pyVoIP.SIPCompatibleMethods))}\r\n"
+        reinvite += "Content-Type: application/sdp\r\n"
+        reinvite += self.__gen_user_agent()
+        reinvite += f"Content-Length: {len(body)}\r\n\r\n"
+        reinvite += body
+
+        return reinvite
+
     def gen_refer(
         self,
         request: SIPMessage,
@@ -1097,11 +1165,13 @@ class SIPClient:
         refer += "Content-Length: 0\r\n\r\n"
         return refer
 
-    def _gen_bye_cancel(self, request: SIPMessage, cmd: str) -> str:
+    def gen_bye(self, request: SIPMessage) -> str:
         tag = self.tagLibrary[request.headers["Call-ID"]]
         c = request.headers["Contact"]["uri"]
-        byeRequest = f"{cmd} {c} SIP/2.0\r\n"
-        byeRequest += self._gen_response_via_header(request)
+        byeRequest = f"BYE {c} SIP/2.0\r\n"
+        # compare to CANCEL: CANCEL은 원래 INVITE의 branch를 재사용하지만(같은 트랜잭션), BYE는 새 branch 생성(새 트랜잭션)
+        branch = self.gen_branch()
+        byeRequest += self.__gen_via(self.server, branch)
         _from = request.headers["From"]
         to = request.headers["To"]
         if request.headers["From"]["tag"] == tag:
@@ -1113,8 +1183,9 @@ class SIPClient:
                 request, "To", tag, dsthdr="From"
             )
         byeRequest += f"Call-ID: {request.headers['Call-ID']}\r\n"
-        cseq = request.headers["CSeq"]["check"]
-        byeRequest += f"CSeq: {cseq} {cmd}\r\n"
+        # compare to CANCEL: CANCEL은 원래 INVITE의 CSeq 번호를 그대로 쓰지만, BYE는 CSeq를 증가시킴
+        cseq = request.headers["CSeq"]["check"] + 1
+        byeRequest += f"CSeq: {cseq} BYE\r\n"
         byeRequest += "Max-Forwards: 70\r\n"
         method = "sips" if self.transport_mode is TransportMode.TLS else "sip"
         byeRequest += self.__gen_contact(
@@ -1126,14 +1197,39 @@ class SIPClient:
         byeRequest += self.__gen_user_agent()
         byeRequest += f"Allow: {(', '.join(pyVoIP.SIPCompatibleMethods))}\r\n"
         byeRequest += "Content-Length: 0\r\n\r\n"
-
         return byeRequest
 
-    def gen_bye(self, request: SIPMessage) -> str:
-        return self._gen_bye_cancel(request, "BYE")
-
     def gen_cancel(self, request: SIPMessage) -> str:
-        return self._gen_bye_cancel(request, "CANCEL")
+        tag = self.tagLibrary[request.headers["Call-ID"]]
+        c = request.headers["Contact"]["uri"]
+        msg = f"CANCEL {c} SIP/2.0\r\n"
+        # CANCEL은 원래 INVITE와 같은 트랜잭션이므로 Via branch/CSeq를 그대로 재사용
+        msg += self._gen_response_via_header(request)
+        _from = request.headers["From"]
+        to = request.headers["To"]
+        if request.headers["From"]["tag"] == tag:
+            msg += self.__gen_from_to_via_request(request, "From", tag)
+            msg += f"To: {to['raw']}\r\n"
+        else:
+            msg += f"To: {_from['raw']}\r\n"
+            msg += self.__gen_from_to_via_request(
+                request, "To", tag, dsthdr="From"
+            )
+        msg += f"Call-ID: {request.headers['Call-ID']}\r\n"
+        cseq = request.headers["CSeq"]["check"]
+        msg += f"CSeq: {cseq} CANCEL\r\n"
+        msg += "Max-Forwards: 70\r\n"
+        method = "sips" if self.transport_mode is TransportMode.TLS else "sip"
+        msg += self.__gen_contact(
+            method,
+            self.user,
+            self.nat.get_host(self.server),
+            port=self.bind_port,
+        )
+        msg += self.__gen_user_agent()
+        msg += f"Allow: {(', '.join(pyVoIP.SIPCompatibleMethods))}\r\n"
+        msg += "Content-Length: 0\r\n\r\n"
+        return msg
 
     def gen_ack(self, request: SIPMessage) -> str:
         tag = self.tagLibrary[request.headers["Call-ID"]]

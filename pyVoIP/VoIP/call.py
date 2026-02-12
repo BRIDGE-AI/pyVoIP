@@ -95,6 +95,12 @@ class VoIPCall:
 
     def receiver(self):
         """Receive and handle incoming messages"""
+        try:
+            self._receiver_loop()
+        except Exception as e:
+            debug(f"receiver crashed: {e}", trace=True)
+
+    def _receiver_loop(self):
         while self.state is not CallState.ENDED and self.phone.NSD:
             data = self.conn.recv(8192, ignore="ACK")
             if data is None:
@@ -142,6 +148,11 @@ class VoIPCall:
             else:
                 if message.method == SIPMethod.BYE:
                     self.bye(message)
+                elif message.method == SIPMethod.INVITE and self.state == CallState.ANSWERED:
+                    try:
+                        self.renegotiate(message)
+                    except Exception as e:
+                        debug(f"renegotiate error (ignored): {e}")
 
     def init_outgoing_call(self, ms: Optional[Dict[int, RTP.PayloadType]]):
         if ms is None:
@@ -714,6 +725,54 @@ class VoIPCall:
         self.conn.close()
         if self.request.headers["Call-ID"] in self.phone.calls:
             del self.phone.calls[self.request.headers["Call-ID"]]
+
+    def get_remote_media_info(self):
+        if not self.RTPClients:
+            return None, None
+        client = self.RTPClients[0]
+        return client.out_ip, client.out_port
+
+    def get_local_media_info(self):
+        if not self.RTPClients:
+            return None, None
+        callback_ip = self.sip.nat.remote_hostname or self.bind_ip
+        return callback_ip, self.RTPClients[0].in_port
+
+    def send_reinvite(self, remote_ip, remote_port):
+        if self.state != CallState.ANSWERED:
+            return False
+        if not self.RTPClients:
+            return False
+
+        m = {}
+        for x in self.RTPClients:
+            m[x.in_port] = x.assoc
+
+        try:
+            reinvite = self.sip.gen_reinvite(
+                self.request, self.session_id, m,
+                self.sendmode, remote_ip, remote_port,
+            )
+            conn = self.sip.sendto(
+                reinvite,
+                (self.request.headers["Contact"]["host"],
+                 self.request.headers["Contact"]["port"]),
+            )
+            data = conn.recv(8192)
+            if data is None:
+                conn.close()
+                return False
+            response = SIPMessage.from_bytes(data)
+            if type(response) is SIPResponse and response.status is ResponseCode.OK:
+                ack = self.sip.gen_ack(response)
+                conn.send(ack)
+                conn.close()
+                return True
+            conn.close()
+            return False
+        except Exception as e:
+            debug(f"send_reinvite error: {e}")
+            return False
 
     def write_audio(self, data: bytes) -> None:
         for x in self.RTPClients:
