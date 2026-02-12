@@ -48,6 +48,7 @@ class VoIPPhoneParameter:
     sip_class: Type[SIPClient] = None
     callback_ip: Optional[str] = None
     ignores: Optional[List[Dict]] = None
+    on_ignored: Optional[callable] = None
     heartbeat_servers: Optional[List[Tuple[str, int]]] = None
 
 

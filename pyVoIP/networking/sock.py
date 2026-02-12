@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 debug = pyVoIP.debug
 
 
+
 class VoIPConnection:
     def __init__(
         self,
@@ -519,6 +520,9 @@ class VoIPSocket(threading.Thread):
                 via = message.headers.get("Via", [{}])[0].get("address", ("?", "?"))
                 ua = message.headers.get("User-Agent", "?")
                 print(f"\033[93m[BLOCKED] {method} from {via[0]}:{via[1]} (UA: {ua}) - condition: {cnd}\033[0m")
+                on_ignored = self.sip.phone.voip_phone_parameter.on_ignored
+                if on_ignored:
+                    on_ignored(message, cnd)
                 return
 
         # 조건에 맞아 ignore한다면 register하지 않음
