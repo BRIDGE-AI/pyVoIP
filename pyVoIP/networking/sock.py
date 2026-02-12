@@ -478,7 +478,7 @@ class VoIPSocket(threading.Thread):
     def _udp_run(self) -> None:
         while not self.SD:
             try:
-                data = self.s.recv(8192)
+                data, addr = self.s.recvfrom(8192)
             except OSError:
                 continue
             if data is None:
@@ -488,10 +488,10 @@ class VoIPSocket(threading.Thread):
             except SIPParseError:
                 continue
             debug(f"RECEIVED UDP Message:\n{message.summary()}", trace=False)
-            self._handle_incoming_message(None, message)
+            self._handle_incoming_message(None, message, source_addr=addr)
 
     def _handle_incoming_message(
-        self, conn: Optional[SOCKETS], message: SIPMessage
+        self, conn: Optional[SOCKETS], message: SIPMessage, source_addr=None
     ):
         call_id = message.headers["Call-ID"]
 
@@ -519,10 +519,11 @@ class VoIPSocket(threading.Thread):
                 method = message.method if hasattr(message, 'method') else 'UNKNOWN'
                 via = message.headers.get("Via", [{}])[0].get("address", ("?", "?"))
                 ua = message.headers.get("User-Agent", "?")
-                print(f"\033[93m[BLOCKED] {method} from {via[0]}:{via[1]} (UA: {ua}) - condition: {cnd}\033[0m")
+                src = f"{source_addr[0]}:{source_addr[1]}" if source_addr else "?"
+                print(f"\033[93m[BLOCKED] {method} from {src} (UA: {ua}) - condition: {cnd}\033[0m")
                 on_ignored = self.sip.phone.voip_phone_parameter.on_ignored
                 if on_ignored:
-                    on_ignored(message, cnd)
+                    on_ignored(message, cnd, source_addr=source_addr)
                 return
 
         # 조건에 맞아 ignore한다면 register하지 않음
