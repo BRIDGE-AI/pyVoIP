@@ -9,7 +9,7 @@ from pyVoIP.SIP.message.message import (
 )
 from pyVoIP.SIP.message.response_codes import ResponseCode
 from pyVoIP.VoIP.error import InvalidStateError
-from threading import Lock, Timer
+from threading import Event, Lock, Timer
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 import audioop
 import io
@@ -118,12 +118,12 @@ class VoIPCall:
                     ]:
                         self.answered(message)
                     elif self.state == CallState.ANSWERED:
-                        # Re-INVITE 200 OK 재전송에 대한 ACK 재전송.
-                        # SBC가 ACK를 수신하지 못하면 200 OK를 반복 재전송하다가
-                        # Q.850 cause=38 (NETWORK_OUT_OF_ORDER) BYE로 통화를 종료함.
                         ack = self.sip.gen_ack(message)
                         self.conn.send(ack)
-                        debug("Re-sent ACK for retransmitted 200 OK")
+                        debug("ACK sent for 200 OK (Re-INVITE)")
+                        if hasattr(self, '_reinvite_event') and self._reinvite_event:
+                            self._reinvite_ok = True
+                            self._reinvite_event.set()
                 elif message.status == ResponseCode.RINGING:
                     self.ringing(message)
                 elif message.status == ResponseCode.SESSION_PROGRESS:
@@ -756,30 +756,24 @@ class VoIPCall:
             m[x.in_port] = x.assoc
 
         try:
+            self._reinvite_ok = False
+            self._reinvite_event = Event()
+
             reinvite = self.sip.gen_reinvite(
                 self.request, self.session_id, m,
                 self.sendmode, remote_ip, remote_port,
             )
-            conn = self.sip.sendto(
-                reinvite,
-                (self.request.headers["Contact"]["host"],
-                 self.request.headers["Contact"]["port"]),
-            )
-            data = conn.recv(8192)
-            if data is None:
-                conn.close()
-                return False
-            response = SIPMessage.from_bytes(data)
-            if type(response) is SIPResponse and response.status is ResponseCode.OK:
-                ack = self.sip.gen_ack(response)
-                conn.send(ack)
-                conn.close()
-                return True
-            conn.close()
+            self.conn.send(reinvite)
+
+            if self._reinvite_event.wait(timeout=5):
+                return self._reinvite_ok
+            debug("send_reinvite timeout waiting for 200 OK")
             return False
         except Exception as e:
             debug(f"send_reinvite error: {e}")
             return False
+        finally:
+            self._reinvite_event = None
 
     def write_audio(self, data: bytes) -> None:
         for x in self.RTPClients:
