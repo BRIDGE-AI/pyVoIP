@@ -315,6 +315,14 @@ class VoIPSocket(threading.Thread):
         if rows:
             conn.close()
             return self.conns.get(rows[0][0], None)
+        # Re-INVITE 200 OK 등에서 determine_tags()가 태그를 역전시킬 수 있음
+        sql = 'SELECT "connection" FROM "listening" WHERE "call_id" IS ?'
+        sql += ' AND "local_tag" IS ? AND "remote_tag" IS ?'
+        result = conn.execute(sql, (call_id, remote_tag, local_tag))
+        rows = result.fetchall()
+        if rows:
+            conn.close()
+            return self.conns.get(rows[0][0], None)
         debug("New Connection Started")
         # If we didn't find one lets look for something that doesn't have
         # one of the tags
@@ -530,7 +538,10 @@ class VoIPSocket(threading.Thread):
         conn_created and self.__register_connection(voip_conn)
 
         type_ = message.start_line[0].split(" ")[0]
-        local_tag, remote_tag = self.determine_tags(message)
+        if not conn_created:
+            local_tag, remote_tag = voip_conn.local_tag, voip_conn.remote_tag
+        else:
+            local_tag, remote_tag = self.determine_tags(message)
         raw_message = message.raw.decode("utf8")
 
         cursor = self.buffer.cursor()
