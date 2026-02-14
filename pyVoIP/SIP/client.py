@@ -1234,7 +1234,11 @@ class SIPClient:
 
     def gen_ack(self, request: SIPMessage) -> str:
         tag = self.tagLibrary[request.headers["Call-ID"]]
-        uri = request.headers["To"]["uri"]
+        contact = request.headers.get("Contact")
+        if contact and contact.get("uri"):
+            uri = contact["uri"]
+        else:
+            uri = request.headers["To"]["uri"]
         ackMessage = f"ACK {uri} SIP/2.0\r\n"
         ackMessage += self._gen_response_via_header(request)
         ackMessage += "Max-Forwards: 70\r\n"
