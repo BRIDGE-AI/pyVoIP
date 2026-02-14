@@ -117,6 +117,13 @@ class VoIPCall:
                         CallState.PROGRESS,
                     ]:
                         self.answered(message)
+                    elif self.state == CallState.ANSWERED:
+                        # Re-INVITE 200 OK 재전송에 대한 ACK 재전송.
+                        # SBC가 ACK를 수신하지 못하면 200 OK를 반복 재전송하다가
+                        # Q.850 cause=38 (NETWORK_OUT_OF_ORDER) BYE로 통화를 종료함.
+                        ack = self.sip.gen_ack(message)
+                        self.conn.send(ack)
+                        debug("Re-sent ACK for retransmitted 200 OK")
                 elif message.status == ResponseCode.RINGING:
                     self.ringing(message)
                 elif message.status == ResponseCode.SESSION_PROGRESS:
