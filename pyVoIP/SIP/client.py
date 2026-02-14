@@ -1184,7 +1184,8 @@ class SIPClient:
             )
         byeRequest += f"Call-ID: {request.headers['Call-ID']}\r\n"
         # compare to CANCEL: CANCEL은 원래 INVITE의 CSeq 번호를 그대로 쓰지만, BYE는 CSeq를 증가시킴
-        cseq = request.headers["CSeq"]["check"] + 1
+        # Re-INVITE가 inviteCounter를 올렸을 수 있으므로 둘 중 큰 값 사용
+        cseq = max(request.headers["CSeq"]["check"] + 1, self.inviteCounter.x)
         byeRequest += f"CSeq: {cseq} BYE\r\n"
         byeRequest += "Max-Forwards: 70\r\n"
         method = "sips" if self.transport_mode is TransportMode.TLS else "sip"
