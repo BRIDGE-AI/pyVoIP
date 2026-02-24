@@ -509,7 +509,12 @@ class VoIPSocket(threading.Thread):
         if voip_conn is None and type(message) is SIPRequest and message.method in (SIPMethod.BYE, SIPMethod.OPTIONS):
             ok = self.sip.gen_ok(message)
             addr = message.headers["Via"][0]["address"]
-            self.s.sendto(ok.encode("utf8"), addr)
+            try:
+                self.s.sendto(ok.encode("utf8"), addr)
+            except OSError:
+                # voip_conn이 없는 BYE/OPTIONS에 대한 예의상 응답이므로
+                # 소켓 닫힘/Via 주소 비정상 등으로 전송 실패해도 무시
+                pass
             return
 
         if voip_conn is None:
