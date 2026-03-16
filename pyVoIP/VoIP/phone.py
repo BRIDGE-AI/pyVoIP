@@ -50,6 +50,7 @@ class VoIPPhoneParameter:
     ignores: Optional[List[Dict]] = None
     on_ignored: Optional[callable] = None
     heartbeat_servers: Optional[List[Tuple[str, int]]] = None
+    max_calls: Optional[int] = None
 
 
 class VoIPPhone:
@@ -239,7 +240,12 @@ class VoIPPhone:
             conn.send(message)
             return
 
-        # 2025-02-11: if ignorable() then delete_msg() and return 구현을 sock.py로 이동
+        max_calls = self.voip_phone_parameter.max_calls
+        if max_calls and len(self.calls) >= max_calls:
+            debug(f"Max concurrent calls reached ({len(self.calls)}/{max_calls}), rejecting with 486")
+            message = self.sip.gen_busy(request)
+            conn.send(message)
+            return
 
         debug("New call!")
         sess_id = None

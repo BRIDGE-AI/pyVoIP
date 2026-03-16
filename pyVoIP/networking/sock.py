@@ -280,6 +280,7 @@ class VoIPSocket(threading.Thread):
             );"""
         )
         conn.close()
+        self.proxy_hook = None
         self.conns_lock = threading.Lock()
         self.buffer_lock = threading.Lock()
         self.conns: Dict[int, VoIPConnection] = {}
@@ -493,6 +494,8 @@ class VoIPSocket(threading.Thread):
             except SIPParseError:
                 continue
             debug(f"RECEIVED UDP Message:\n{message.summary()}", trace=False)
+            if self.proxy_hook and self.proxy_hook(data, message, addr):
+                continue
             self._handle_incoming_message(None, message, source_addr=addr)
 
     def _handle_incoming_message(
