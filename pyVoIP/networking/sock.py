@@ -494,6 +494,16 @@ class VoIPSocket(threading.Thread):
             except SIPParseError:
                 continue
             debug(f"RECEIVED UDP Message:\n{message.summary()}", trace=False)
+            if type(message) is SIPRequest and self.sip.phone.ignorable(message) is not None:
+                cnd = self.sip.phone.ignorable(message)
+                method = message.method if hasattr(message, 'method') else 'UNKNOWN'
+                ua = message.headers.get("User-Agent", "?")
+                src = f"{addr[0]}:{addr[1]}" if addr else "?"
+                print(f"\033[93m[BLOCKED] {method} from {src} (UA: {ua}) - condition: {cnd}\033[0m")
+                on_ignored = self.sip.phone.voip_phone_parameter.on_ignored
+                if on_ignored:
+                    on_ignored(message, cnd, source_addr=addr)
+                continue
             if self.proxy_hook and self.proxy_hook(data, message, addr):
                 continue
             self._handle_incoming_message(None, message, source_addr=addr)
